@@ -1234,6 +1234,8 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
         if (ret < 0) {
             if (ret == AVERROR(EAGAIN))
                 return ret;
+            if (ret == AVERROR(EIO))
+                return ret;
             /* flush the parsers */
             for (unsigned i = 0; i < s->nb_streams; i++) {
                 AVStream *const st  = s->streams[i];
