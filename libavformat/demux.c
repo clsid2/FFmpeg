@@ -2234,14 +2234,14 @@ static int tb_unreliable(AVFormatContext *ic, AVStream *st)
                                                                                                 : st->time_base);
 
     if (time_base.den >= 101LL * time_base.num ||
-        time_base.den <    5LL * time_base.num ||
+        time_base.den <    5LL * time_base.num/* ||
         // c->codec_tag == AV_RL32("DIVX") ||
         // c->codec_tag == AV_RL32("XVID") ||
         c->codec_tag == AV_RL32("mp4v") ||
         c->codec_id == AV_CODEC_ID_MPEG2VIDEO ||
         c->codec_id == AV_CODEC_ID_GIF ||
         c->codec_id == AV_CODEC_ID_HEVC ||
-        c->codec_id == AV_CODEC_ID_H264)
+        c->codec_id == AV_CODEC_ID_H264*/)
         return 1;
     return 0;
 }
