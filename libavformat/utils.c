@@ -1294,9 +1294,9 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     if (delay == 1 && pkt->dts == pkt->pts &&
         pkt->dts != AV_NOPTS_VALUE && presentation_delayed) {
         av_log(s, AV_LOG_DEBUG, "invalid dts/pts combination %"PRIi64"\n", pkt->dts);
-        if (    strcmp(s->iformat->name, "mov,mp4,m4a,3gp,3g2,mj2")
+        /*if (    strcmp(s->iformat->name, "mov,mp4,m4a,3gp,3g2,mj2")
              && strcmp(s->iformat->name, "flv")) // otherwise we discard correct timestamps for vc1-wmapro.ism
-            pkt->dts = AV_NOPTS_VALUE;
+            pkt->dts = AV_NOPTS_VALUE; */
     }
 
     duration = av_mul_q((AVRational) {pkt->duration, 1}, st->time_base);
