@@ -872,6 +872,11 @@ static enum AVPixelFormat get_pixel_format(H264Context *h, int force_callback)
     return ff_thread_get_format(h->avctx, choices);
 }
 
+enum AVPixelFormat ff_h264_get_pixel_format(H264Context *h)
+{
+    return get_pixel_format(h, 1);
+}
+
 /* export coded and cropped frame dimensions to AVCodecContext */
 static int init_dimensions(H264Context *h)
 {
