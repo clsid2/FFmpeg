@@ -851,4 +851,6 @@ void ff_h264_free_tables(H264Context *h);
 
 void ff_h264_set_erpic(ERPicture *dst, H264Picture *src);
 
+enum AVPixelFormat ff_h264_get_pixel_format(H264Context *h);
+
 #endif /* AVCODEC_H264DEC_H */
