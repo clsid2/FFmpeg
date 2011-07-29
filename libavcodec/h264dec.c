@@ -422,6 +422,17 @@ static av_cold int h264_decode_init(AVCodecContext *avctx)
         }
     }
 
+    if (h->ps.sps) {
+        h->avctx->colorspace = h->ps.sps->colorspace;
+        h->avctx->pix_fmt    = ff_h264_get_pixel_format(h);
+        if (h->avctx->pix_fmt < 0)
+            h->avctx->pix_fmt = AV_PIX_FMT_NONE;
+
+        h->avctx->profile    = ff_h264_get_profile(h->ps.sps);
+        h->avctx->level      = h->ps.sps->level_idc;
+        h->avctx->refs       = h->ps.sps->ref_frame_count;
+    }
+
     if (h->ps.sps && h->ps.sps->bitstream_restriction_flag &&
         h->avctx->has_b_frames < h->ps.sps->num_reorder_frames) {
         h->avctx->has_b_frames = h->ps.sps->num_reorder_frames;
