@@ -5128,6 +5128,7 @@ typedef struct AVCodecParserContext {
 /// Set if the parser has a valid file offset
 #define PARSER_FLAG_FETCHED_OFFSET            0x0004
 #define PARSER_FLAG_USE_CODEC_TS              0x1000
+#define PARSER_FLAG_NO_TIMESTAMP_MANGLING     0x2000
 
     int64_t offset;      ///< byte offset from starting packet start
     int64_t cur_frame_end[AV_PARSER_PTS_NB];

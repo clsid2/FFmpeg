@@ -1339,7 +1339,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
 
     /* Interpolate PTS and DTS if they are not present. We skip H264
      * currently because delay and has_b_frames are not reliably set. */
-    if ((delay == 0 || (delay == 1 && pc)) &&
+    if ((delay == 0 || (delay == 1 && pc && !(pc->flags & PARSER_FLAG_NO_TIMESTAMP_MANGLING))) &&
         onein_oneout) {
         if (presentation_delayed) {
             /* DTS = decompression timestamp */
