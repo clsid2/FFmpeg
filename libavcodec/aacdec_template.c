@@ -3337,6 +3337,21 @@ static av_cold int aac_decode_close(AVCodecContext *avctx)
     AACContext *ac = avctx->priv_data;
     int i, type;
 
+    if (!avctx->extradata_size && ac->oc[1].m4ac.object_type && ac->oc[1].m4ac.chan_config) {
+        PutBitContext pb;
+
+        avctx->extradata = av_mallocz(2 + FF_INPUT_BUFFER_PADDING_SIZE);
+        avctx->extradata_size = 2;
+        init_put_bits(&pb, avctx->extradata, avctx->extradata_size);
+        put_bits(&pb, 5, ac->oc[1].m4ac.object_type);
+        put_bits(&pb, 4, ac->oc[1].m4ac.sampling_index);
+        put_bits(&pb, 4, ac->oc[1].m4ac.chan_config);
+        put_bits(&pb, 1, 0); //frame length - 1024 samples
+        put_bits(&pb, 1, 0); //does not depend on core coder
+        put_bits(&pb, 1, 0); //is not extension
+        flush_put_bits(&pb);
+    }
+
     for (i = 0; i < MAX_ELEM_ID; i++) {
         for (type = 0; type < 4; type++) {
             if (ac->che[type][i])
