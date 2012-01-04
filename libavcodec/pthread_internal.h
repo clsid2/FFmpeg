@@ -23,7 +23,7 @@
 
 /* H.264 slice threading seems to be buggy with more than 16 threads,
  * limit the number of threads to 16 for automatic detection */
-#define MAX_AUTO_THREADS 16
+#define MAX_AUTO_THREADS 1
 
 int ff_slice_thread_init(AVCodecContext *avctx);
 void ff_slice_thread_free(AVCodecContext *avctx);
