@@ -38,6 +38,7 @@ struct dxva2_picture_context {
 
     const uint8_t          *bitstream;
     unsigned               bitstream_size;
+    int                    frame_start;
 };
 
 static void fill_picture_parameters(AVCodecContext *avctx,
@@ -272,6 +273,7 @@ static int dxva2_mpeg2_start_frame(AVCodecContext *avctx,
     ctx_pic->slice_count    = 0;
     ctx_pic->bitstream_size = 0;
     ctx_pic->bitstream      = NULL;
+    ctx_pic->frame_start    = 1;
     return 0;
 }
 
@@ -305,8 +307,9 @@ static int dxva2_mpeg2_end_frame(AVCodecContext *avctx)
         s->current_picture_ptr->hwaccel_picture_private;
     int ret;
 
-    if (ctx_pic->slice_count <= 0 || ctx_pic->bitstream_size <= 0)
+    if (ctx_pic->slice_count <= 0 || ctx_pic->bitstream_size <= 0 || !ctx_pic->frame_start)
         return -1;
+    ctx_pic->frame_start = 0;
     ret = ff_dxva2_common_end_frame(avctx, s->current_picture_ptr->f,
                                     &ctx_pic->pp, sizeof(ctx_pic->pp),
                                     &ctx_pic->qm, sizeof(ctx_pic->qm),
