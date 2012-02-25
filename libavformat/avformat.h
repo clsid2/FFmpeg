@@ -1247,6 +1247,8 @@ typedef struct AVFormatContext {
 #endif
 #define AVFMT_FLAG_AUTO_BSF   0x200000 ///< Add bitstream filters as requested by the muxer
 
+#define AVFMT_FLAG_NETWORK        0x80000000 ///< Source is a network protocol, optimize for that
+
     /**
      * Maximum number of bytes read from input in order to determine stream
      * properties. Used when reading the global header and in
