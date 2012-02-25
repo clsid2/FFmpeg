@@ -1475,6 +1475,8 @@ typedef struct AVFormatContext {
 #define AVFMT_FLAG_SHORTEST   0x100000 ///< Stop muxing when the shortest stream stops.
 #define AVFMT_FLAG_AUTO_BSF   0x200000 ///< Wait for packet data before writing a header, and add bitstream filters as requested by the muxer
 
+#define AVFMT_FLAG_NETWORK        0x80000000 ///< Source is a network protocol, optimize for that
+
     /**
      * Maximum size of the data read from input for determining
      * the input container format.
