@@ -1520,6 +1520,8 @@ typedef struct AVFormatContext {
 #define AVFMT_FLAG_LEGACY_ID3V2_COMM_KEYS 0x400000
 #endif
 
+#define AVFMT_FLAG_NETWORK        0x80000000 ///< Source is a network protocol, optimize for that
+
     /**
      * Maximum number of bytes read from input in order to determine stream
      * properties. Used when reading the global header and in
