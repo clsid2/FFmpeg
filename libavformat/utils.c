@@ -2312,7 +2312,10 @@ int64_t ff_gen_search(AVFormatContext *s, int stream_index, int64_t target_ts,
         av_log(s, AV_LOG_TRACE,
                 "pos_min=0x%"PRIx64" pos_max=0x%"PRIx64" dts_min=%s dts_max=%s\n",
                 pos_min, pos_max, av_ts2str(ts_min), av_ts2str(ts_max));
-        av_assert0(pos_limit <= pos_max);
+        if (pos_limit > pos_max) {
+            av_log(s, AV_LOG_ERROR, "pos_limit (0x%"PRIx64") > pos_max (0x%"PRIx64"), pos (0x%"PRIx64")\n", pos_limit, pos_max, pos);
+            return -1;
+        }
 
         if (no_change == 0) {
             int64_t approximate_keyframe_distance = pos_max - pos_limit;
