@@ -1810,7 +1810,7 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
                     st->internal->need_context_update = 1;
                 }
                 if (st->codecpar->codec_id == AV_CODEC_ID_MPEG4SYSTEMS)
-                    mpegts_open_section_filter(ts, pid, m4sl_cb, ts, 1);
+                    mpegts_open_section_filter(ts, pid, m4sl_cb, ts, 0);
             }
         break;
     case 0x1F: /* FMC descriptor */
@@ -2477,7 +2477,7 @@ static void pat_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
                     mpegts_close_filter(ts, ts->pids[pmt_pid]);
 
             if (!ts->pids[pmt_pid])
-                mpegts_open_section_filter(ts, pmt_pid, pmt_cb, ts, 1);
+                mpegts_open_section_filter(ts, pmt_pid, pmt_cb, ts, 0);
             add_pat_entry(ts, sid);
             add_pid_to_pmt(ts, sid, 0); // add pat pid to program
             add_pid_to_pmt(ts, sid, pmt_pid);
@@ -2981,9 +2981,9 @@ static int mpegts_read_header(AVFormatContext *s)
         /* first do a scan to get all the services */
         seek_back(s, pb, pos);
 
-        mpegts_open_section_filter(ts, SDT_PID, sdt_cb, ts, 1);
+        mpegts_open_section_filter(ts, SDT_PID, sdt_cb, ts, 0);
 
-        mpegts_open_section_filter(ts, PAT_PID, pat_cb, ts, 1);
+        mpegts_open_section_filter(ts, PAT_PID, pat_cb, ts, 0);
 
         handle_packets(ts, probesize / ts->raw_packet_size);
         /* if could not find service, enable auto_guess */
@@ -3238,8 +3238,8 @@ MpegTSContext *avpriv_mpegts_parse_open(AVFormatContext *s)
     ts->raw_packet_size = TS_PACKET_SIZE;
     ts->stream = s;
     ts->auto_guess = 1;
-    mpegts_open_section_filter(ts, SDT_PID, sdt_cb, ts, 1);
-    mpegts_open_section_filter(ts, PAT_PID, pat_cb, ts, 1);
+    mpegts_open_section_filter(ts, SDT_PID, sdt_cb, ts, 0);
+    mpegts_open_section_filter(ts, PAT_PID, pat_cb, ts, 0);
 
     return ts;
 }
