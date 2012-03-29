@@ -114,4 +114,6 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
  */
 int ff_check_h264_startcode(AVFormatContext *s, const AVStream *st, const AVPacket *pkt);
 
+int avpriv_mpegts_add_stream(AVFormatContext *s, int pid, uint32_t stream_type, int program);
+
 #endif /* AVFORMAT_MPEGTS_H */
