@@ -2949,7 +2949,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
     if (ret >= 0 && ic->nb_streams)
         /* We could not have all the codec parameters before EOF. */
-        ret = -1;
+        ret = 0;
     for (unsigned i = 0; i < ic->nb_streams; i++) {
         AVStream *const st  = ic->streams[i];
         FFStream *const sti = ffstream(st);
