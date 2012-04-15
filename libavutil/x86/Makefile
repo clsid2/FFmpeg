@@ -15,4 +15,4 @@ X86ASM-OBJS += x86/cpuid.o                                              \
              x86/imgutils.o                                             \
              x86/lls.o                                                  \
 
-X86ASM-OBJS-$(CONFIG_PIXELUTILS) += x86/pixelutils.o                    \
+X86ASM-OBJS-$(CONFIG_PIXELUTILS) += x86/pixelutils.o
