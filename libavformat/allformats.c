@@ -268,6 +268,7 @@ extern const FFInputFormat  ff_mca_demuxer;
 extern const FFInputFormat  ff_mcc_demuxer;
 extern const FFOutputFormat ff_md5_muxer;
 extern const FFInputFormat  ff_matroska_demuxer;
+extern const FFInputFormat  ff_matroska_haali_demuxer;
 extern const FFOutputFormat ff_matroska_muxer;
 extern const FFOutputFormat ff_matroska_audio_muxer;
 extern const FFInputFormat  ff_mgsts_demuxer;
