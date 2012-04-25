@@ -180,6 +180,7 @@ static void register_all(void)
     REGISTER_MUXER   (MD5,              md5);
     REGISTER_MUXDEMUX(MATROSKA,         matroska);
     REGISTER_MUXER   (MATROSKA_AUDIO,   matroska_audio);
+    REGISTER_DEMUXER (MATROSKA_HAALI,   matroska_haali);
     REGISTER_DEMUXER (MGSTS,            mgsts);
     REGISTER_MUXDEMUX(MICRODVD,         microdvd);
     REGISTER_MUXDEMUX(MJPEG,            mjpeg);
