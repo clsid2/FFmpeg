@@ -245,6 +245,7 @@ extern AVInputFormat  ff_mca_demuxer;
 extern AVInputFormat  ff_mcc_demuxer;
 extern AVOutputFormat ff_md5_muxer;
 extern AVInputFormat  ff_matroska_demuxer;
+extern AVInputFormat  ff_matroska_haali_demuxer;
 extern AVOutputFormat ff_matroska_muxer;
 extern AVOutputFormat ff_matroska_audio_muxer;
 extern AVInputFormat  ff_mgsts_demuxer;
