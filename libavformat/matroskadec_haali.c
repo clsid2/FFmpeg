@@ -453,7 +453,8 @@ static int mkv_read_header(AVFormatContext *s)
         1 << 30);
       if (st->codec->codec_id != AV_CODEC_ID_H264)
         st->need_parsing = AVSTREAM_PARSE_HEADERS;
-      if (info->DefaultDuration) {
+      av_log(s, AV_LOG_DEBUG, "Default Duration: %"PRId64"\n", info->DefaultDuration);
+      if (info->DefaultDuration && info->DefaultDuration > 8000000) {
         av_reduce(&st->r_frame_rate.num, &st->r_frame_rate.den,
                   1000000000, info->DefaultDuration, 100000);
         st->avg_frame_rate = st->r_frame_rate;
