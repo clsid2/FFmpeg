@@ -344,8 +344,10 @@ int ff_mpv_frame_start(MpegEncContext *s, AVCodecContext *avctx)
             pic->reference = 3;
     }
 
-    if (alloc_picture(s, pic) < 0)
+    if (alloc_picture(s, pic) < 0) {
+        s->current_picture_ptr = NULL;
         return -1;
+    }
 
     s->current_picture_ptr = pic;
     // FIXME use only the vars from current_pic
