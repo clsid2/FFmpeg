@@ -323,8 +323,10 @@ FF_DISABLE_DEPRECATION_WARNINGS
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
-    if (alloc_picture(s, pic) < 0)
+    if (alloc_picture(s, pic) < 0) {
+        s->current_picture_ptr = NULL;
         return -1;
+    }
 
     s->current_picture_ptr = pic;
     // FIXME use only the vars from current_pic
