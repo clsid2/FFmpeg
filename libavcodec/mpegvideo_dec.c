@@ -320,8 +320,10 @@ int ff_mpv_frame_start(MpegEncContext *s, AVCodecContext *avctx)
     ff_mpv_unref_picture(&s->cur_pic);
     ret = alloc_picture(s, &s->cur_pic,
                         s->pict_type != AV_PICTURE_TYPE_B && !s->droppable);
-    if (ret < 0)
+    if (ret < 0) {
+        ff_mpv_unref_picture(&s->cur_pic);
         return ret;
+    }
 
     s->cur_pic.ptr->f->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST * !!s->top_field_first;
     s->cur_pic.ptr->f->flags |= AV_FRAME_FLAG_INTERLACED *
