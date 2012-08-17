@@ -1150,6 +1150,7 @@ static int h264_export_frame_props(H264Context *h)
         H264SEIPictureTiming *pt = &h->sei.picture_timing;
         switch (pt->pic_struct) {
         case H264_SEI_PIC_STRUCT_FRAME:
+            cur->f->interlaced_frame = FIELD_OR_MBAFF_PICTURE(h);
             break;
         case H264_SEI_PIC_STRUCT_TOP_FIELD:
         case H264_SEI_PIC_STRUCT_BOTTOM_FIELD:
