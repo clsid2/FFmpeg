@@ -697,7 +697,8 @@ static int avi_read_header(AVFormatContext *s)
                 codec_type = AVMEDIA_TYPE_AUDIO;
                 break;
             case MKTAG('t', 'x', 't', 's'):
-                codec_type = AVMEDIA_TYPE_SUBTITLE;
+                st->codecpar->codec_type = codec_type = AVMEDIA_TYPE_SUBTITLE;
+                ffstream(st)->request_probe = 1;
                 break;
             case MKTAG('d', 'a', 't', 's'):
                 codec_type = AVMEDIA_TYPE_DATA;
