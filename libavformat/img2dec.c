@@ -493,7 +493,7 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
         } else if (!ffstream(s1->streams[0])->parser) {
             size[0] = avio_size(s1->pb);
         } else {
-            size[0] = 4096;
+            size[0]= avio_size(f[0]);
         }
     }
 
@@ -552,15 +552,7 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     }
 
     if (ret[0] <= 0 || ret[1] < 0 || ret[2] < 0) {
-        if (ret[0] < 0) {
-            res = ret[0];
-        } else if (ret[1] < 0) {
-            res = ret[1];
-        } else if (ret[2] < 0) {
-            res = ret[2];
-        } else {
-            res = AVERROR_EOF;
-        }
+        res = AVERROR_EOF;
         goto fail;
     } else {
         memset(pkt->data + pkt->size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
