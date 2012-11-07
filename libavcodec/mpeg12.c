@@ -211,9 +211,15 @@ int ff_mpeg1_find_frame_end(ParseContext *pc, const uint8_t *buf, int buf_size, 
                 pc->frame_start_found = 4;
             }
             if (state == SEQ_END_CODE) {
+                int idx = i+1;
+                /* DVDs won't send the next frame start on still images */
+                /* SEQ_END_CODE will have to stay at the beginning of the next frame */
+                if (pc->frame_start_found && i != 3) {
+                    idx = i-3;
+                }
                 pc->frame_start_found = 0;
                 pc->state=-1;
-                return i+1;
+                return idx;
             }
             if (pc->frame_start_found == 2 && state == SEQ_START_CODE)
                 pc->frame_start_found = 0;
