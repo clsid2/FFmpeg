@@ -9039,7 +9039,7 @@ static int mov_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
                 continue;
 
             timestamp = av_rescale_q(seek_timestamp, s->streams[stream_index]->time_base, st->time_base);
-            sample = mov_seek_stream(s, st, timestamp, flags);
+            sample = mov_seek_stream(s, st, timestamp, flags | AVSEEK_FLAG_ANY);
             if (sample >= 0)
                 sti->skip_samples = mov_get_skip_samples(st, sample);
         }
