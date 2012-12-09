@@ -1566,7 +1566,9 @@ static void parseTracks(MatroskaFile *mf,ulonglong toplen) {
 static void addCue(MatroskaFile *mf,ulonglong pos,ulonglong timecode) {
   struct Cue  *cc = AGET(mf,Cues);
   cc->Time = timecode;
+  cc->Duration = 0;
   cc->Position = pos;
+  cc->RelativePosition = 0;
   cc->Track = 0;
   cc->Block = 0;
 }
@@ -1579,6 +1581,7 @@ static void fixupCues(MatroskaFile *mf) {
   for (i=0;i<mf->nCues;++i) {
     mf->Cues[i].Time *= mf->Seg.TimecodeScale;
     mf->Cues[i].Time -= adjust;
+    mf->Cues[i].Duration *= mf->Seg.TimecodeScale;
   }
 }
 
@@ -1591,6 +1594,8 @@ static void parseCues(MatroskaFile *mf,ulonglong toplen) {
   mf->seen.Cues = 1;
   mf->nCues = 0;
   cc.Block = 0;
+  cc.Duration = 0;
+  cc.RelativePosition = 0;
 
   memcpy(&jb,&mf->jb,sizeof(jb));
 
@@ -1615,8 +1620,14 @@ static void parseCues(MatroskaFile *mf,ulonglong toplen) {
                 errorjmp(mf,"CueTrack points to an invalid track: %d",(int)v);
               cc.Track = (unsigned char)v;
               break;
+            case 0xb2: // CueDuration
+              cc.Duration = readUInt(mf,(unsigned)len);
+              break;
             case 0xf1: // CueClusterPosition
               cc.Position = readUInt(mf,(unsigned)len);
+              break;
+            case 0xf0: // CueRelativePosition
+              cc.RelativePosition = readUInt(mf,(unsigned)len);
               break;
             case 0x5378: // CueBlockNumber
               cc.Block = readUInt(mf,(unsigned)len);
