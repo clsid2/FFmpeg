@@ -244,7 +244,9 @@ typedef struct Chapter	Chapter;
 
 struct Cue {
   ulonglong        Time;
+  ulonglong        Duration;
   ulonglong        Position;
+  ulonglong        RelativePosition;
   ulonglong        Block;
   unsigned char        Track;
 };
