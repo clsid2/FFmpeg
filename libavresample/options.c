@@ -83,6 +83,7 @@ static const AVOption avresample_options[] = {
         {"triangular",    "Triangular Dither",                    0, AV_OPT_TYPE_CONST, { .i64 = AV_RESAMPLE_DITHER_TRIANGULAR    }, INT_MIN, INT_MAX, PARAM, "dither_method"},
         {"triangular_hp", "Triangular Dither With High Pass",     0, AV_OPT_TYPE_CONST, { .i64 = AV_RESAMPLE_DITHER_TRIANGULAR_HP }, INT_MIN, INT_MAX, PARAM, "dither_method"},
         {"triangular_ns", "Triangular Dither With Noise Shaping", 0, AV_OPT_TYPE_CONST, { .i64 = AV_RESAMPLE_DITHER_TRIANGULAR_NS }, INT_MIN, INT_MAX, PARAM, "dither_method"},
+    { "clip_protection",        "Clipping Protection",      OFFSET(clip_protection),        AV_OPT_TYPE_INT,    { .i64 = 0              }, 0,                    1,                      PARAM },
     { NULL },
 };
 
