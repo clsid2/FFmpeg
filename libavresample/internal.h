@@ -105,6 +105,8 @@ struct AVAudioResampleContext {
     int use_channel_map;
     enum RemapPoint remap_point;
     ChannelMapInfo ch_map_info;
+
+    int clip_protection;
 };
 
 
