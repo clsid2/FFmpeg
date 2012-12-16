@@ -185,6 +185,9 @@ struct SwrContext {
     mix_any_func_type *mix_any_f;
 
     /* TODO: callbacks for ASM optimizations */
+
+    int clip_protection;
+    float clip_max;
 };
 
 av_warn_unused_result
