@@ -142,6 +142,7 @@ static const AVOption options[]={
 { "kaiser_beta"         , "set swr Kaiser window beta"  , OFFSET(kaiser_beta)    , AV_OPT_TYPE_DOUBLE  , {.dbl=9                     }, 2      , 16        , PARAM },
 
 { "output_sample_bits"  , "set swr number of output sample bits", OFFSET(dither.output_sample_bits), AV_OPT_TYPE_INT  , {.i64=0   }, 0      , 64        , PARAM },
+{ "clip_protection"     , "Clipping Protection"         , OFFSET(clip_protection), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, PARAM },
 {0}
 };
 
