@@ -3917,6 +3917,12 @@ typedef struct AVSubtitleRect {
     int flags;
 } AVSubtitleRect;
 
+typedef struct AVSubtitleDVDPalette {
+    uint32_t start_display_time;
+    uint8_t colormap[4];
+    uint8_t alpha[4];
+} AVSubtitleDVDPalette;
+
 typedef struct AVSubtitle {
     uint16_t format; /* 0 = graphics */
     uint32_t start_display_time; /* relative to packet pts, in ms */
@@ -3924,6 +3930,9 @@ typedef struct AVSubtitle {
     unsigned num_rects;
     AVSubtitleRect **rects;
     int64_t pts;    ///< Same as packet pts, in AV_TIME_BASE
+
+    unsigned num_dvd_palette;
+    AVSubtitleDVDPalette **dvd_palette;
 } AVSubtitle;
 
 /**

@@ -326,7 +326,7 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
             case 0xff:
                 goto the_end;
             default:
-                ff_dlog(NULL, "unrecognised subpicture command 0x%x\n", cmd);
+                av_log(ctx, AV_LOG_WARNING, "unrecognised subpicture command 0x%x\n", cmd);
                 goto the_end;
             }
         }
@@ -334,6 +334,14 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
         if (offset1 >= buf_size || offset2 >= buf_size)
             goto fail;
 
+        /* store dvd palette info in subtitle struct for use by caller */
+        i = sub_header->num_dvd_palette++;
+        sub_header->dvd_palette = av_realloc(sub_header->dvd_palette, sizeof(AVSubtitleDVDPalette *) * (i+1));
+        sub_header->dvd_palette[i] = av_mallocz(sizeof(AVSubtitleDVDPalette));
+        sub_header->dvd_palette[i]->start_display_time = (date << 10) / 90;
+        memcpy(sub_header->dvd_palette[i]->colormap, colormap, 4);
+        memcpy(sub_header->dvd_palette[i]->alpha, alpha, 4);
+        /* parse rle subtitles */
         if (offset1 >= 0 && offset2 >= 0) {
             int w, h;
             uint8_t *bitmap;
