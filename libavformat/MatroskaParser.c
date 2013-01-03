@@ -1227,6 +1227,14 @@ static void parseVideoInfo(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *t
       ti->AV.Video.GammaValue = readFloat(mf,(unsigned)len);
       break;
   ENDFOR(mf);
+
+  // DisplayWidth/Height defaults don't apply for DisplayUnit != 0
+  if (ti->AV.Video.DisplayUnit != 0) {
+    if (!dW)
+      ti->AV.Video.DisplayWidth = 0;
+    if (!dH)
+      ti->AV.Video.DisplayHeight = 0;
+  }
 }
 
 static void parseAudioInfo(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *ti) {
