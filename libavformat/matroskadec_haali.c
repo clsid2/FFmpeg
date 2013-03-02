@@ -45,7 +45,7 @@ static const char *matroska_doctypes[] = { "matroska", "webm" };
 
 typedef struct AVIOStream {
   InputStream base;
-  AVFormatContext *ctx;
+  AVIOContext *pb;
 } AVIOStream;
 
 typedef struct MatroskaTrack {
@@ -58,12 +58,10 @@ typedef struct MatroskaTrack {
 typedef struct MatroskaDemuxContext {
   AVIOStream      *iostream;
   MatroskaFile    *matroska;
-  AVFormatContext *ctx;
 
   int num_tracks;
-  MatroskaTrack   *tracks;
-
-  ulonglong mask;
+  ulonglong track_mask;
+  MatroskaTrack *tracks;
 
   char CSBuffer[4096];
   unsigned BufferSize;
@@ -77,18 +75,18 @@ static int aviostream_read(struct AVIOStream *cc,ulonglong pos,void *buffer,int 
   if (count == 0)
     return 0;
 
-  cur_pos = avio_tell(cc->ctx->pb);
+  cur_pos = avio_tell(cc->pb);
   if (cur_pos != pos) {
     /* Seek to the desired position */
-    ret64 = avio_seek(cc->ctx->pb, pos, SEEK_SET);
+    ret64 = avio_seek(cc->pb, pos, SEEK_SET);
     if(ret64 < 0) {
-      av_log(cc->ctx, AV_LOG_ERROR, "aviostream_scan(): Seek to %"PRIu64" failed with code %"PRId64, pos, ret64);
+      av_log(cc->pb, AV_LOG_ERROR, "aviostream_scan(): Seek to %"PRIu64" failed with code %"PRId64, pos, ret64);
       return -1;
     }
   }
 
   /* Read the requested number of bytes */
-  ret = avio_read(cc->ctx->pb, (unsigned char *)buffer, count);
+  ret = avio_read(cc->pb, (unsigned char *)buffer, count);
   if (ret == AVERROR_EOF) {
     return 0;
   } else if (ret < 0) {
@@ -102,21 +100,21 @@ static longlong aviostream_scan(struct AVIOStream *cc,ulonglong start,unsigned s
   int64_t ret64, cur_pos;
   unsigned cmp = 0;
 
-  cur_pos = avio_tell(cc->ctx->pb);
+  cur_pos = avio_tell(cc->pb);
   if (cur_pos != start) {
     /* Seek to the desired position */
-    ret64 = avio_seek(cc->ctx->pb, start, SEEK_SET);
+    ret64 = avio_seek(cc->pb, start, SEEK_SET);
     if(ret64 < 0) {
-      av_log(cc->ctx, AV_LOG_ERROR, "aviostream_scan(): Seek to %"PRIu64" failed with code %"PRId64, start, ret64);
+      av_log(cc->pb, AV_LOG_ERROR, "aviostream_scan(): Seek to %"PRIu64" failed with code %"PRId64, start, ret64);
       return -1;
     }
   }
 
   /* Scan for the byte signature, until EOF was found */
-  while(!cc->ctx->pb->eof_reached) {
-    cmp = ((cmp << 8) | avio_r8(cc->ctx->pb)) & 0xffffffff;
+  while(!cc->pb->eof_reached) {
+    cmp = ((cmp << 8) | avio_r8(cc->pb)) & 0xffffffff;
     if (cmp == signature)
-      return avio_tell(cc->ctx->pb) - 4;
+      return avio_tell(cc->pb) - 4;
   }
 
   return -1;
@@ -124,7 +122,7 @@ static longlong aviostream_scan(struct AVIOStream *cc,ulonglong start,unsigned s
 
 static unsigned aviostream_getcachesize(struct AVIOStream *cc)
 {
-  return cc->ctx->pb->max_packet_size ? cc->ctx->pb->max_packet_size : IO_BUFFER_SIZE;
+  return cc->pb->max_packet_size ? cc->pb->max_packet_size : IO_BUFFER_SIZE;
 }
 
 static const char *aviostream_geterror(struct AVIOStream *cc)
@@ -154,7 +152,24 @@ static int aviostream_progress(struct AVIOStream *cc, ulonglong cur, ulonglong m
 
 static longlong aviostream_getfilesize(struct AVIOStream *cc)
 {
-  return avio_size(cc->ctx->pb);
+  return avio_size(cc->pb);
+}
+
+static AVIOStream *aviostream_create(AVIOContext *pb)
+{
+  AVIOStream *iostream = (AVIOStream *)av_mallocz(sizeof(AVIOStream));
+  iostream->base.read = (int (*)(InputStream *,ulonglong,void *,int))aviostream_read;
+  iostream->base.scan = (longlong (*)(InputStream *,ulonglong,unsigned int))aviostream_scan;
+  iostream->base.getcachesize = (unsigned (*)(InputStream *cc))aviostream_getcachesize;
+  iostream->base.geterror = (const char *(*)(InputStream *))aviostream_geterror;
+  iostream->base.memalloc = (void *(*)(InputStream *,size_t))aviostream_memalloc;
+  iostream->base.memrealloc = (void *(*)(InputStream *,void *,size_t))aviostream_memrealloc;
+  iostream->base.memfree = (void (*)(InputStream *,void *))aviostream_memfree;
+  iostream->base.progress = (int (*)(InputStream *,ulonglong,ulonglong))aviostream_progress;
+  iostream->base.getfilesize = (longlong (*)(InputStream *))aviostream_getfilesize;
+  iostream->pb = pb;
+
+  return iostream;
 }
 
 /* Taken vanilla from ffmpeg */
@@ -253,6 +268,22 @@ static ulonglong mkv_get_track_mask(MatroskaDemuxContext *ctx)
   return mask;
 }
 
+static void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong time, int flags)
+{
+  if (time > 0) {
+    unsigned int count, i;
+    Cue *cue;
+    mkv_GetCues(mf, &cue, &count);
+    if (count > 0) {
+      for (i = 0; i < count; i++) {
+        if (cue[i].Time == time)
+          flags &= ~MKVF_SEEK_TO_PREV_KEYFRAME;
+      }
+    }
+  }
+  mkv_Seek(mf, time, flags);
+}
+
 static int mkv_read_header(AVFormatContext *s)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
@@ -264,21 +295,10 @@ static int mkv_read_header(AVFormatContext *s)
   Cue *cues = NULL;
   unsigned int count, u;
 
-  AVIOStream *iostream = (AVIOStream *)av_mallocz(sizeof(AVIOStream));
-  iostream->base.read = (int (*)(InputStream *,ulonglong,void *,int))aviostream_read;
-  iostream->base.scan = (longlong (*)(InputStream *,ulonglong,unsigned int))aviostream_scan;
-  iostream->base.getcachesize = (unsigned (*)(InputStream *cc))aviostream_getcachesize;
-  iostream->base.geterror = (const char *(*)(InputStream *))aviostream_geterror;
-  iostream->base.memalloc = (void *(*)(InputStream *,size_t))aviostream_memalloc;
-  iostream->base.memrealloc = (void *(*)(InputStream *,void *,size_t))aviostream_memrealloc;
-  iostream->base.memfree = (void (*)(InputStream *,void *))aviostream_memfree;
-  iostream->base.progress = (int (*)(InputStream *,ulonglong,ulonglong))aviostream_progress;
-  iostream->base.getfilesize = (longlong (*)(InputStream *))aviostream_getfilesize;
-  iostream->ctx = s;
-  ctx->iostream = iostream;
+  ctx->iostream = aviostream_create(s->pb);
 
   av_log(s, AV_LOG_DEBUG, "Opening MKV file");
-  ctx->matroska = mkv_OpenEx(&iostream->base, 0, 0, ErrorMessage, sizeof(ErrorMessage));
+  ctx->matroska = mkv_OpenEx(&ctx->iostream->base, 0, 0, ErrorMessage, sizeof(ErrorMessage));
   if (!ctx->matroska) {
     av_log(s, AV_LOG_ERROR, "mkv_OpenEx returned error: %s", ErrorMessage);
     return -1;
@@ -336,6 +356,8 @@ static int mkv_read_header(AVFormatContext *s)
     st = track->stream = avformat_new_stream(s, NULL);
     if (st == NULL)
       return AVERROR(ENOMEM);
+
+    st->id = info->Number;
 
     if (!strcmp(info->CodecID, "V_MS/VFW/FOURCC") && info->CodecPrivateSize >= 40 && info->CodecPrivate != NULL) {
       track->ms_compat = 1;
@@ -548,9 +570,9 @@ static int mkv_read_packet(AVFormatContext *s, AVPacket *pkt)
   ulonglong mask = 0;
   if (!(s->flags & AVFMT_FLAG_NETWORK)) {
     mask = mkv_get_track_mask(ctx);
-    if (mask != ctx->mask) {
+    if (mask != ctx->track_mask) {
       mkv_SetTrackMask(ctx->matroska, mask);
-      ctx->mask = mask;
+      ctx->track_mask = mask;
     }
   }
 
@@ -649,24 +671,14 @@ static int mkv_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
   int mkvflags = (!(flags & AVSEEK_FLAG_ANY) && !(s->flags & AVFMT_FLAG_NETWORK)) ? MKVF_SEEK_TO_PREV_KEYFRAME : 0;
-  int i;
   int64_t cur_dts;
-  AVStream *st = ctx->tracks[stream_index].stream;
-
-  /* check if we're seeking to a index entry directly, and if so, disable the keyframe logic */
-  for (i = 0; i < st->nb_index_entries; i++) {
-    if (st->index_entries[i].timestamp == timestamp) {
-      mkvflags &= ~MKVF_SEEK_TO_PREV_KEYFRAME;
-      break;
-    }
-  }
 
   /* update track mask */
   if (!(s->flags & AVFMT_FLAG_NETWORK))
     mkv_SetTrackMask(ctx->matroska, mkv_get_track_mask(ctx));
 
   /* perform seek */
-  mkv_Seek(ctx->matroska, timestamp, mkvflags);
+  mkv_Seek_CueAware(ctx->matroska, timestamp, mkvflags);
 
   /* Update current timestamp */
   cur_dts = mkv_GetLowestQTimecode(ctx->matroska);
