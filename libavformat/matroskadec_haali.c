@@ -239,7 +239,7 @@ static int matroska_aac_sri(int samplerate)
 static void mkv_process_chapter(AVFormatContext *s, Chapter *chapter, int level)
 {
   unsigned i;
-  if (chapter->UID && chapter->Enabled) {
+  if (chapter->UID && chapter->Enabled && !chapter->Hidden) {
     AVChapter *avchap = avpriv_new_chapter(s, (int)chapter->UID, (AVRational){1, 1000000000}, chapter->Start, chapter->End, chapter->Display ? chapter->Display->String : NULL);
 
     if (level > 0 && chapter->Display && chapter->Display->String) {
@@ -250,7 +250,7 @@ static void mkv_process_chapter(AVFormatContext *s, Chapter *chapter, int level)
       av_dict_set(&avchap->metadata, "title", title, 0);
     }
   }
-  if (chapter->nChildren > 0) {
+  if ((chapter->Enabled || level < 0) && chapter->nChildren > 0) {
     for (i = 0; i < chapter->nChildren; i++) {
       mkv_process_chapter(s, chapter->Children + i, level + 1);
     }
@@ -326,6 +326,9 @@ static int mkv_read_header(AVFormatContext *s)
     AVIOContext b;
 
     track->info = info;
+
+    if (!info->Enabled)
+      continue;
 
     if (info->Type != TT_VIDEO && info->Type != TT_AUDIO && info->Type != TT_SUB) {
       av_log(s, AV_LOG_ERROR, "Unknown or unsupported track type: %d", info->Type);
