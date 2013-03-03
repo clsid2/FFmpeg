@@ -268,6 +268,39 @@ static ulonglong mkv_get_track_mask(MatroskaDemuxContext *ctx)
   return mask;
 }
 
+static void mkv_dump_chapters(Chapter *chapters, int count)
+{
+  av_log(NULL, AV_LOG_INFO, "  -> Chapter List:");
+  for (int i = 0; i < count; i++) {
+    Chapter *chapter = &chapters[i];
+    av_log(NULL, AV_LOG_INFO, "   -> Chapter %d", i);
+    av_log(NULL, AV_LOG_INFO, "    -> UID:        %I64u", chapter->UID);
+    av_log(NULL, AV_LOG_INFO, "    -> SegmentUID: %08x%08x%08x%08x",
+      *(unsigned int*)&chapter->SegmentUID[0], *(unsigned int*)&chapter->SegmentUID[4], *(unsigned int*)&chapter->SegmentUID[8], *(unsigned int*)&chapter->SegmentUID[12]);
+    av_log(NULL, AV_LOG_INFO, "    -> Enabled:    %d", chapter->Enabled);
+    av_log(NULL, AV_LOG_INFO, "    -> Hidden:     %d", chapter->Hidden);
+    av_log(NULL, AV_LOG_INFO, "    -> Start:      %I64u", chapter->Start);
+    av_log(NULL, AV_LOG_INFO, "    -> End:        %I64u", chapter->End);
+    if (chapter->Display && chapter->Display->String)
+      av_log(NULL, AV_LOG_INFO, "    -> Name:       %s", chapter->Display->String);
+  }
+}
+
+static void mkv_dump_editions(Chapter *editions, int count)
+{
+  av_log(NULL, AV_LOG_INFO, "MKV Editions:");
+  for (int i = 0; i < count; i++) {
+    Chapter *edition = &editions[i];
+    av_log(NULL, AV_LOG_INFO, " -> Edition %d", i);
+    av_log(NULL, AV_LOG_INFO, "  -> UID:      %I64u", edition->UID);
+    av_log(NULL, AV_LOG_INFO, "  -> Default:  %d", edition->Default);
+    av_log(NULL, AV_LOG_INFO, "  -> Hidden:   %d", edition->Hidden);
+    av_log(NULL, AV_LOG_INFO, "  -> Ordered:  %d", edition->Ordered);
+    av_log(NULL, AV_LOG_INFO, "  -> Chapters: %d", edition->nChildren);
+    mkv_dump_chapters(edition->Children, edition->nChildren);
+  }
+}
+
 static void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong time, int flags)
 {
   if (time > 0) {
@@ -515,6 +548,7 @@ static int mkv_read_header(AVFormatContext *s)
 
   /* chapter start at level -1 because they are always wrapped in a edition entry */
   mkv_GetChapters(ctx->matroska, &chapters, &count);
+  mkv_dump_editions(chapters, count);
   for (u = 0; u < count; u++) {
     mkv_process_chapter(s, chapters + u, -1);
   }
