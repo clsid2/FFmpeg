@@ -66,7 +66,6 @@ typedef struct MatroskaDemuxContext {
   ulonglong mask;
 
   char CSBuffer[4096];
-  char *Buffer;
   unsigned BufferSize;
 } MatroskaDemuxContext;
 
@@ -541,7 +540,7 @@ static int mkv_read_packet(AVFormatContext *s, AVPacket *pkt)
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
 
   int ret;
-  unsigned int size, offset = 0, flags, track_num;
+  unsigned int size, flags, track_num;
   ulonglong start_time, end_time, pos;
   MatroskaTrack *track;
   char *frame_data = NULL;
@@ -556,48 +555,58 @@ static int mkv_read_packet(AVFormatContext *s, AVPacket *pkt)
   }
 
 again:
-  av_freep(&frame_data);
   ret = mkv_ReadFrame(ctx->matroska, mask, &track_num, &start_time, &end_time, &pos, &size, &frame_data, &flags);
   if (ret < 0)
     return AVERROR_EOF;
 
   track = &ctx->tracks[track_num];
-  if (!track->stream || track->stream->discard == AVDISCARD_ALL)
+  if (!track->stream || track->stream->discard == AVDISCARD_ALL) {
+    av_freep(&frame_data);
     goto again;
+  }
 
   /* zlib compression */
   if (track->cs) {
     unsigned int frame_size = 0;
+    pkt->size = 0;
+    if (ctx->BufferSize)
+      av_new_packet(pkt, ctx->BufferSize);
     cs_NextFrame(track->cs, size, frame_data);
     for(;;) {
       ret = cs_ReadData(track->cs, ctx->CSBuffer, sizeof(ctx->CSBuffer));
       if (ret < 0) {
         av_log(s, AV_LOG_ERROR, "cs_ReadData failed");
-        ret = AVERROR(EIO);
-        goto done;
+        av_freep(&frame_data);
+        av_free_packet(pkt);
+        return AVERROR(EIO);
       } else if (ret == 0) {
         size = frame_size;
         break;
       }
-      if (ctx->BufferSize < (frame_size + ret)) {
-        ctx->BufferSize = (frame_size + ret) * 2;
-        ctx->Buffer = (char *)av_realloc(ctx->Buffer, ctx->BufferSize);
+      if (pkt->size < (frame_size + ret)) {
+        av_grow_packet(pkt, (frame_size + ret));
+        ctx->BufferSize = pkt->size;
       }
-      memcpy(ctx->Buffer + frame_size, ctx->CSBuffer, ret);
+      memcpy(pkt->data+frame_size, ctx->CSBuffer, ret);
       frame_size += ret;
     }
-    av_new_packet(pkt, frame_size);
-    memcpy(pkt->data, ctx->Buffer, frame_size);
+    pkt->size = size;
+    av_freep(&frame_data);
   } else {
+    int offset = 0;
     /* header removal compression */
     if (track->info->CompEnabled && track->info->CompMethod == COMP_PREPEND && track->info->CompMethodPrivateSize > 0) {
       offset = track->info->CompMethodPrivateSize;
     }
 
-    av_new_packet(pkt, size+offset);
-    memcpy(pkt->data+offset, frame_data, size);
-    if (offset > 0)
+    if (offset > 0) {
+      av_new_packet(pkt, size+offset);
       memcpy(pkt->data, track->info->CompMethodPrivate, offset);
+      memcpy(pkt->data+offset, frame_data, size);
+      av_freep(&frame_data);
+    } else {
+      av_packet_from_data(pkt, frame_data, size);
+    }
   }
 
   if (!(flags & FRAME_UNKNOWN_START)) {
@@ -614,13 +623,9 @@ again:
 
   pkt->flags = (flags & FRAME_KF) ? AV_PKT_FLAG_KEY : 0;
   pkt->pos = pos;
-  pkt->size = size+offset;
   pkt->stream_index = track->stream->index;
 
-  ret = 0;
-done:
-  av_freep(&frame_data);
-  return ret;
+  return 0;
 }
 
 static int mkv_read_close(AVFormatContext *s)
