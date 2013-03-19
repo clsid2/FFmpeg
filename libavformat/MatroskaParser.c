@@ -2284,7 +2284,7 @@ found:
         qe->End = timecode;
         qe->Position = v;
         qe->Length = sizes[i];
-        qe->Data = (char *)mf->cache->memalloc(mf->cache,qe->Length);
+        qe->Data = (char *)mf->cache->memalloc(mf->cache,qe->Length + 16);
         readbytes(mf, qe->Data, qe->Length);
         qe->flags = FRAME_UNKNOWN_END | FRAME_KF;
         if (i == nframes-1 && gap)
@@ -3234,10 +3234,10 @@ int              mkv_ReadFrame(MatroskaFile *mf,
       *EndTime = qe->End;
       *FilePos = qe->Position;
       *FrameSize = qe->Length;
-      *FrameData = (char *)mf->cache->memalloc(mf->cache, qe->Length);
-      memcpy(*FrameData, qe->Data, qe->Length);
+      *FrameData = qe->Data;
       *FrameFlags = qe->flags;
 
+      qe->Data = NULL;
       QFree(mf,qe);
 
       return 0;
