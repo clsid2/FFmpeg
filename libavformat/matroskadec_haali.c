@@ -39,6 +39,9 @@
 #include <zlib.h>
 #endif
 
+#include <io.h>
+#include <windows.h>
+
 #define IO_BUFFER_SIZE 32768
 
 static const char *matroska_doctypes[] = { "matroska", "webm" };
@@ -55,9 +58,18 @@ typedef struct MatroskaTrack {
   int ms_compat;
 } MatroskaTrack;
 
+typedef struct MatroskaSegment {
+  int index;
+  AVIOStream   *iostream;
+  MatroskaFile *matroska;
+  SegmentInfo  *info;
+  int free_avio;
+} MatroskaSegment;
+
 typedef struct VirtualTimelineEntry {
   int index;
   Chapter *chapter;
+  MatroskaSegment *segment;
   ulonglong start;
   ulonglong stop;
   longlong offset;
@@ -65,7 +77,6 @@ typedef struct VirtualTimelineEntry {
 } VirtualTimelineEntry;
 
 typedef struct MatroskaDemuxContext {
-  AVIOStream      *iostream;
   MatroskaFile    *matroska;
 
   int num_tracks;
@@ -83,6 +94,10 @@ typedef struct MatroskaDemuxContext {
   VirtualTimelineEntry *timeline;
   int num_timeline;
   int timeline_position;
+
+  MatroskaSegment **segments;
+  int num_segments;
+  int segments_scanned;
 } MatroskaDemuxContext;
 
 static int aviostream_read(struct AVIOStream *cc,ulonglong pos,void *buffer,int count)
@@ -254,6 +269,150 @@ static int matroska_aac_sri(int samplerate)
   return sri;
 }
 
+static int mkv_uid_compare(char first[16], char second[16])
+{
+  return !memcmp(first, second, 16);
+}
+
+static int mkv_uid_zero(char uid[16])
+{
+  char zero[16] = {0};
+  return mkv_uid_compare(uid, zero);
+}
+
+static MatroskaSegment* mkv_open_segment(AVFormatContext *s, AVIOContext *pb, ulonglong base)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  char ErrorMessage[256];
+
+  MatroskaSegment *segment = av_mallocz(sizeof(*segment));
+  segment->index    = ctx->num_segments;
+  segment->iostream = aviostream_create(pb);
+  segment->matroska = mkv_OpenEx(&segment->iostream->base, base, 0, ErrorMessage, sizeof(ErrorMessage));
+
+  if (!segment->matroska) {
+    av_log(s, AV_LOG_ERROR, "mkv_OpenEx returned error: %s\n", ErrorMessage);
+    av_freep(&segment);
+    return NULL;
+  }
+
+  segment->info = mkv_GetFileInfo(segment->matroska);
+
+  av_dynarray_add(&ctx->segments, &ctx->num_segments, segment);
+  return segment;
+}
+
+static int mkv_find_segments_avio(AVFormatContext *s, AVIOContext *pb, ulonglong base)
+{
+  MatroskaSegment *segment;
+  int found = 0;
+  int64_t size = avio_size(pb);
+
+  if (base >= size)
+    return 0;
+
+  while (base < size) {
+    av_log(s, AV_LOG_INFO, "Scanning for Segment at %I64d\n", base);
+    segment = mkv_open_segment(s, pb, base);
+    if (!segment)
+      break;
+
+    av_log(s, AV_LOG_INFO, "Found Segment with UID: %08x%08x%08x%08x\n",
+      *(unsigned int*)&segment->info->UID[0], *(unsigned int*)&segment->info->UID[4], *(unsigned int*)&segment->info->UID[8], *(unsigned int*)&segment->info->UID[12]);
+
+    if (!found && base == 0) {
+      segment->free_avio = 1;
+      found = 1;
+    }
+    base = mkv_GetSegmentTop(segment->matroska);
+  }
+
+  return found;
+}
+
+static void mkv_find_segments_file(AVFormatContext *s, const char *path, const char *file, ulonglong base)
+{
+  AVIOContext *pb = NULL;
+  int num_segments;
+  char *filename = av_asprintf("%s/%s", path, file);
+
+  if (avio_open(&pb, filename, AVIO_FLAG_READ) < 0) {
+    av_log(s, AV_LOG_ERROR, "Error opening file %s\n", filename);
+    goto done;
+  }
+  av_log(s, AV_LOG_INFO, "Opening %s, size %I64d...\n", filename, avio_size(pb));
+  num_segments = mkv_find_segments_avio(s, pb, base);
+  if (num_segments == 0) {
+    av_log(s, AV_LOG_WARNING, "File %s could not be opened as MKV\n", filename);
+    avio_closep(&pb);
+  }
+
+done:
+  av_freep(&filename);
+}
+
+static void mkv_find_segments(AVFormatContext *s)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  char *filename, *filespec;
+  const char *path, *file;
+  int ret = 0;
+  intptr_t handle;
+  struct _wfinddata_t finddata;
+
+  filename = av_strdup(s->filename);
+  file = av_basename(filename);
+  path = av_dirname(filename);
+  filespec = av_asprintf("%s/*.mk?", path);
+
+  wchar_t wfilespec[4096];
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filespec, -1, wfilespec, 4096)) {
+    handle = _wfindfirst(wfilespec, &finddata);
+    if (handle != -1) {
+      while (ret == 0) {
+        char mkvFileName[4096];
+        WideCharToMultiByte(CP_UTF8, 0, finddata.name, -1, mkvFileName, 4096, NULL, NULL);
+
+        // Skip the main file, it was processed elsewhere
+        if (av_strcasecmp(mkvFileName, file) != 0) {
+          mkv_find_segments_file(s, path, mkvFileName, 0);
+        }
+        ret = _wfindnext(handle, &finddata);
+      }
+      _findclose(handle);
+    }
+  }
+
+  av_freep(&filename);
+  av_freep(&filespec);
+}
+
+static MatroskaSegment* mkv_get_segment(AVFormatContext *s, char uid[16])
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  int i;
+
+  if (mkv_uid_zero(uid) || mkv_uid_compare(ctx->segments[0]->info->UID, uid))
+    return ctx->segments[0];
+
+  if (!ctx->segments_scanned) {
+    /* scan for segments within this file */
+    ulonglong base = mkv_GetSegmentTop(ctx->segments[0]->matroska);
+    mkv_find_segments_avio(s, ctx->segments[0]->iostream->pb, base);
+
+    /* and for segments in other files */
+    mkv_find_segments(s);
+    ctx->segments_scanned = 1;
+  }
+
+  for (i = 1; i < ctx->num_segments; i++) {
+    if (mkv_uid_compare(ctx->segments[i]->info->UID, uid)) {
+      return ctx->segments[i];
+    }
+  }
+  return NULL;
+}
+
 static void mkv_build_timeline(AVFormatContext *s, Chapter *edition)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
@@ -266,6 +425,7 @@ static void mkv_build_timeline(AVFormatContext *s, Chapter *edition)
   ctx->num_timeline = 0;
   for (i = 0; i < edition->nChildren; i++) {
     Chapter *chapter = &edition->Children[i];
+    MatroskaSegment *segment = mkv_get_segment(s, chapter->SegmentUID);
     /* check that the chapter timeline is valid */
     if (chapter->End < chapter->Start) {
       edition->Ordered = 0;
@@ -273,14 +433,15 @@ static void mkv_build_timeline(AVFormatContext *s, Chapter *edition)
       av_freep(&ctx->timeline);
       return;
     }
-    if (chapter->Enabled && chapter->End > chapter->Start) {
+    if (segment && chapter->Enabled && chapter->End > chapter->Start) {
       VirtualTimelineEntry *vt = &ctx->timeline[ctx->num_timeline];
       vt->index     = ctx->num_timeline;
       vt->chapter   = chapter;
+      vt->segment   = segment;
       vt->start     = duration;
       vt->stop      = vt->start + (chapter->End - chapter->Start);
       vt->offset    = (longlong)chapter->Start - (longlong)vt->start;
-      vt->need_seek = (vt->index == 0 && chapter->Start != 0) || (vt->index > 0 && chapter->Start != ctx->timeline[vt->index-1].chapter->End);
+      vt->need_seek = (vt->index == 0 && (chapter->Start != 0 || segment->index != 0)) || (vt->index > 0 && (chapter->Start != ctx->timeline[vt->index-1].chapter->End || segment != ctx->timeline[vt->index-1].segment));
 
       duration      = vt->stop;
       ctx->num_timeline++;
@@ -406,7 +567,7 @@ static void mkv_process_virtual_cues(AVFormatContext *s, VirtualTimelineEntry *v
   int i;
   Cue *cues = NULL;
 
-  mkv_GetCues(ctx->matroska, &cues, &count);
+  mkv_GetCues(vt->segment->matroska, &cues, &count);
   for (u = 0; u < count; u++) {
     Cue *cue = &cues[u];
     if (cue->Time >= vt->chapter->Start && cue->Time < vt->chapter->End) {
@@ -513,36 +674,32 @@ static void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong time, int flags)
 static int mkv_read_header(AVFormatContext *s)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
-  char ErrorMessage[256];
   int i, j, num_tracks;
-  SegmentInfo *segment;
+  char ErrorMessage[256];
+  MatroskaSegment *segment;
   Chapter *chapters = NULL;
   Attachment *attachments = NULL;
   unsigned int count, u;
 
-  ctx->iostream = aviostream_create(s->pb);
-
-  av_log(s, AV_LOG_DEBUG, "Opening MKV file");
-  ctx->matroska = mkv_OpenEx(&ctx->iostream->base, 0, 0, ErrorMessage, sizeof(ErrorMessage));
-  if (!ctx->matroska) {
-    av_log(s, AV_LOG_ERROR, "mkv_OpenEx returned error: %s", ErrorMessage);
+  segment = mkv_open_segment(s, s->pb, 0);
+  if (!segment)
     return -1;
-  }
 
-  /* Gather information */
-  segment = mkv_GetFileInfo(ctx->matroska);
+  ctx->matroska = segment->matroska;
 
-  if (segment->Duration)
-    s->duration = segment->Duration / (1000000000 / AV_TIME_BASE);
-  av_dict_set(&s->metadata, "title", segment->Title, 0);
+  if (segment->info->Duration)
+    s->duration = segment->info->Duration / (1000000000 / AV_TIME_BASE);
+  av_dict_set(&s->metadata, "title", segment->info->Title, 0);
 
   /* Process Editions/Chapters */
   mkv_GetChapters(ctx->matroska, &chapters, &count);
   if (count > 0) {
     mkv_process_editions(s, chapters, count);
-    if (ctx->virtual_timeline && ctx->timeline[0].need_seek) {
-      mkv_Seek(ctx->matroska, ctx->timeline[0].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME);
-    }
+  }
+
+  if (ctx->virtual_timeline && ctx->timeline[0].need_seek) {
+    ctx->matroska = ctx->timeline[ctx->timeline_position].segment->matroska;
+    mkv_Seek_CueAware(ctx->matroska, ctx->timeline[0].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME);
   }
 
   /* Tracks */
@@ -766,7 +923,7 @@ static int mkv_read_header(AVFormatContext *s)
       if(st->codec->extradata == NULL)
         break;
       st->codec->extradata_size = (int)attach->Length;
-      aviostream_read(ctx->iostream, attach->Position, st->codec->extradata, st->codec->extradata_size);
+      aviostream_read(segment->iostream, attach->Position, st->codec->extradata, st->codec->extradata_size);
 
       for (i=0; ff_mkv_mime_tags[i].id != AV_CODEC_ID_NONE; i++) {
         if (!strncmp(ff_mkv_mime_tags[i].str, attach->MimeType, strlen(ff_mkv_mime_tags[i].str))) {
@@ -808,7 +965,8 @@ static int mkv_packet_timeline_update(AVFormatContext *s, ulonglong *start_time,
     }
     if (ctx->timeline[ctx->timeline_position].need_seek) {
       av_log(s, AV_LOG_INFO, "Seeking to timeline %d (position %I64d)\n", ctx->timeline_position, ctx->timeline[ctx->timeline_position].chapter->Start);
-      mkv_Seek(ctx->matroska, ctx->timeline[ctx->timeline_position].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME);
+      ctx->matroska = ctx->timeline[ctx->timeline_position].segment->matroska;
+      mkv_Seek_CueAware(ctx->matroska, ctx->timeline[ctx->timeline_position].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME);
       // Need to discard the current frame, and re-read after the seek
       return AVERROR(EAGAIN);
     }
@@ -933,8 +1091,13 @@ static int mkv_read_close(AVFormatContext *s)
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
   int i;
 
-  mkv_Close(ctx->matroska);
-  av_freep(&ctx->iostream);
+  for (i = 0; i < ctx->num_segments; i++) {
+    mkv_Close(ctx->segments[i]->matroska);
+    if (ctx->segments[i]->free_avio)
+      avio_closep(&ctx->segments[i]->iostream->pb);
+    av_freep(&ctx->segments[i]->iostream);
+  }
+  av_freep(&ctx->segments);
 
   for (i = 0; i < ctx->num_tracks; i++) {
     av_freep(&ctx->tracks[i].cs);
@@ -955,6 +1118,7 @@ static int mkv_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
   /* Update timeline and segment for ordered chapters */
   if (ctx->virtual_timeline) {
     VirtualTimelineEntry *vt = mkv_get_timeline_entry(s, timestamp);
+    ctx->matroska          = vt->segment->matroska;
     ctx->timeline_position = vt->index;
     timestamp += vt->offset;
   }
