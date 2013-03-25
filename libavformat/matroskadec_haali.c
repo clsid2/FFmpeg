@@ -87,17 +87,22 @@ typedef struct MatroskaDemuxContext {
   unsigned BufferSize;
 
   Chapter **editions;
+  AVEdition *aveditions;
   int num_editions;
-
-  int virtual_timeline;
 
   VirtualTimelineEntry *timeline;
   int num_timeline;
+
+  int virtual_timeline;
   int timeline_position;
 
   MatroskaSegment **segments;
   int num_segments;
   int segments_scanned;
+
+  // Options
+  int next_edition;
+  int active_edition;
 } MatroskaDemuxContext;
 
 static int aviostream_read(struct AVIOStream *cc,ulonglong pos,void *buffer,int count)
@@ -625,8 +630,35 @@ static void mkv_switch_edition(AVFormatContext *s, int index)
     av_freep(&ctx->timeline);
   }
 
+  s->duration = ctx->aveditions[index].duration;
+
   mkv_process_chapters(s, edition);
   mkv_build_index(s);
+}
+
+static int64_t mkv_edition_duration(AVFormatContext *s, Chapter *edition)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  int64_t duration = 0;
+  int i = 0;
+
+  if (edition->Ordered) {
+    for (i = 0; i < edition->nChildren; i++) {
+      Chapter *chapter = &edition->Children[i];
+      MatroskaSegment *segment = mkv_get_segment(s, chapter->SegmentUID);
+      /* check that the chapter timeline is valid */
+      if (chapter->End < chapter->Start) {
+        duration = ctx->segments[0]->info->Duration;
+        break;
+      }
+      if (segment && chapter->Enabled) {
+        duration += (chapter->End - chapter->Start);
+      }
+    }
+  } else {
+    duration = ctx->segments[0]->info->Duration;
+  }
+  return duration / (1000000000 / AV_TIME_BASE);
 }
 
 static void mkv_process_editions(AVFormatContext *s, Chapter *editions, int count)
@@ -652,7 +684,62 @@ static void mkv_process_editions(AVFormatContext *s, Chapter *editions, int coun
   if (edition_index == -1)
     edition_index = 0;
 
+  ctx->aveditions = av_mallocz(sizeof(*ctx->aveditions) * ctx->num_editions);
+  for (i = 0; i < ctx->num_editions; i++) {
+    Chapter *edition = ctx->editions[i];
+    AVEdition *avedition = &ctx->aveditions[i];
+    avedition->index = i;
+    avedition->duration = mkv_edition_duration(s, edition);
+    avedition->ordered = edition->Ordered;
+  }
+  ctx->active_edition = edition_index;
   mkv_switch_edition(s, edition_index);
+}
+
+static void mkv_process_tags_edition(AVFormatContext *s, ulonglong UID, struct SimpleTag *tags, unsigned int tagCount)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  int i, edition_index = -1;
+  unsigned j;
+  for (i = 0; i < ctx->num_editions; i++) {
+    if (ctx->editions[i]->UID == UID) {
+      edition_index = i;
+      break;
+    }
+  }
+  if (edition_index == -1)
+    return;
+
+  for (j = 0; j < tagCount; j++) {
+    if (av_strcasecmp(tags[j].Name, "TITLE") == 0) {
+      ctx->aveditions[edition_index].title = tags[j].Value;
+      break;
+    }
+  }
+}
+
+static void mkv_process_tags(AVFormatContext *s, Tag *tags, unsigned int tagCount)
+{
+  unsigned i, j;
+  for (i = 0; i < tagCount; i++) {
+    Tag *tag = &tags[i];
+    if (tag->nSimpleTags > 0 && tag->nTargets > 0) {
+      for (j = 0; j < tag->nTargets; j++) {
+        switch (tag->Targets[j].Type) {
+        case TARGET_CHAPTER:
+        case TARGET_ATTACHMENT:
+        default:
+          /* unsupported */
+          break;
+        case TARGET_TRACK:
+          break;
+        case TARGET_EDITION:
+          mkv_process_tags_edition(s, tag->Targets[j].UID, tag->SimpleTags, tag->nSimpleTags);
+          break;
+        }
+      }
+    }
+  }
 }
 
 static void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong time, int flags)
@@ -679,6 +766,8 @@ static int mkv_read_header(AVFormatContext *s)
   MatroskaSegment *segment;
   Chapter *chapters = NULL;
   Attachment *attachments = NULL;
+  Tag *tags = NULL;
+  unsigned int tagCount = 0;
   unsigned int count, u;
 
   segment = mkv_open_segment(s, s->pb, 0);
@@ -686,6 +775,7 @@ static int mkv_read_header(AVFormatContext *s)
     return -1;
 
   ctx->matroska = segment->matroska;
+  ctx->next_edition = -1;
 
   if (segment->info->Duration)
     s->duration = segment->info->Duration / (1000000000 / AV_TIME_BASE);
@@ -696,6 +786,9 @@ static int mkv_read_header(AVFormatContext *s)
   if (count > 0) {
     mkv_process_editions(s, chapters, count);
   }
+
+  /* Read Tags before ctx->matroska gets swapped out, but process them at the end */
+  mkv_GetTags(ctx->matroska, &tags, &tagCount);
 
   if (ctx->virtual_timeline && ctx->timeline[0].need_seek) {
     ctx->matroska = ctx->timeline[ctx->timeline_position].segment->matroska;
@@ -934,6 +1027,10 @@ static int mkv_read_header(AVFormatContext *s)
     }
   }
 
+  if (tagCount > 0 && tags) {
+    mkv_process_tags(s, tags, tagCount);
+  }
+
   /* Can only build the index after tracks are loaded */
   mkv_build_index(s);
 
@@ -1105,6 +1202,7 @@ static int mkv_read_close(AVFormatContext *s)
   av_freep(&ctx->tracks);
   av_freep(&ctx->editions);
   av_freep(&ctx->timeline);
+  av_freep(&ctx->aveditions);
 
   return 0;
 }
@@ -1114,6 +1212,14 @@ static int mkv_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
   int mkvflags = (!(flags & AVSEEK_FLAG_ANY) && !(s->flags & AVFMT_FLAG_NETWORK)) ? MKVF_SEEK_TO_PREV_KEYFRAME : 0;
   int64_t cur_dts;
+
+  /* Switch to another edition if requested */
+  if (ctx->next_edition > -1) {
+    av_log(s, AV_LOG_INFO, "switching to edition %d\n", ctx->next_edition);
+    mkv_switch_edition(s, ctx->next_edition);
+    ctx->active_edition = ctx->next_edition;
+    ctx->next_edition = -1;
+  }
 
   /* Update timeline and segment for ordered chapters */
   if (ctx->virtual_timeline) {
@@ -1143,6 +1249,37 @@ static int mkv_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
   ff_update_cur_dts(s, ctx->tracks[stream_index].stream, cur_dts);
 
   return 0;
+}
+
+int av_mkv_get_num_editions(AVFormatContext *s)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  return ctx->num_editions;
+}
+
+int av_mkv_get_editions(AVFormatContext *s, AVEdition **editions)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  if (!editions)
+    return -1;
+  *editions = ctx->aveditions;
+  return 0;
+}
+
+int av_mkv_set_next_edition(AVFormatContext *s, int index)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  if (index < 0 || index >= ctx->num_editions)
+    return -1;
+
+  ctx->next_edition = index;
+  return 0;
+}
+
+int av_mkv_get_edition(AVFormatContext *s)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  return ctx->active_edition;
 }
 
 AVInputFormat ff_matroska_haali_demuxer = {
