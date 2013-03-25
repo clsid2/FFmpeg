@@ -394,4 +394,16 @@ int ff_mkv_stereo3d_conv(AVStream *st, MatroskaVideoStereoModeType stereo_mode);
 
 #define DVCC_DVVC_BLOCK_TYPE_NAME "Dolby Vision configuration"
 
+typedef struct AVEdition {
+  int index;
+  int ordered;
+  int64_t duration;
+  const char *title;
+} AVEdition;
+
+int av_mkv_get_num_editions(AVFormatContext *s);
+int av_mkv_get_editions(AVFormatContext *s, AVEdition **editions);
+int av_mkv_set_next_edition(AVFormatContext *s, int index);
+int av_mkv_get_edition(AVFormatContext *s);
+
 #endif /* AVFORMAT_MATROSKA_H */
