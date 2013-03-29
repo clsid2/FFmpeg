@@ -742,22 +742,6 @@ static void mkv_process_tags(AVFormatContext *s, Tag *tags, unsigned int tagCoun
   }
 }
 
-static void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong time, int flags)
-{
-  if (time > 0) {
-    unsigned int count, i;
-    Cue *cue;
-    mkv_GetCues(mf, &cue, &count);
-    if (count > 0) {
-      for (i = 0; i < count; i++) {
-        if (cue[i].Time == time)
-          flags &= ~MKVF_SEEK_TO_PREV_KEYFRAME;
-      }
-    }
-  }
-  mkv_Seek(mf, time, flags);
-}
-
 static int mkv_read_header(AVFormatContext *s)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
