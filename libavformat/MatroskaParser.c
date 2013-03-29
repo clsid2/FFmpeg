@@ -2967,6 +2967,33 @@ ulonglong     mkv_GetSegmentTop(MatroskaFile *mf) {
 
 #define        IS_DELTA(f) (!((f)->flags & FRAME_KF) || ((f)->flags & FRAME_UNKNOWN_START))
 
+static inline ulonglong mkv_time_diff(ulonglong one, ulonglong two)
+{
+  if (one > two)
+    return one-two;
+  else
+    return two-one;
+}
+
+void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong timecode, unsigned flags)
+{
+  if (timecode > 0 && (flags & (MKVF_SEEK_TO_PREV_KEYFRAME|MKVF_SEEK_TO_PREV_KEYFRAME_STRICT))) {
+    unsigned int count, i;
+    Cue *cue;
+    mkv_GetCues(mf, &cue, &count);
+    if (count > 0) {
+      for (i = 0; i < count; i++) {
+        ulonglong tcDiff = mkv_time_diff(cue[i].Time, timecode);
+        if (tcDiff == 0 || (cue[i].Track && cue[i].Track <= mf->nTracks && tcDiff <= mf->Tracks[cue[i].Track-1]->DefaultDuration)) {
+          flags &= ~(MKVF_SEEK_TO_PREV_KEYFRAME|MKVF_SEEK_TO_PREV_KEYFRAME_STRICT);
+          timecode = cue[i].Time;
+        }
+      }
+    }
+  }
+  mkv_Seek(mf, timecode, flags);
+}
+
 void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
   int                i,j,m,ret;
   unsigned        n,z;
