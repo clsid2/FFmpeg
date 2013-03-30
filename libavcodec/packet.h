@@ -64,6 +64,9 @@ enum AVPacketSideDataType {
      * if (param_flags & AV_SIDE_DATA_PARAM_CHANGE_DIMENSIONS)
      *     s32le width
      *     s32le height
+     * if (param_flags & AV_SIDE_DATA_PARAM_CHANGE_ASPECTRATIO)
+     *     s32le num
+     *     s32le den
      * @endcode
      */
     AV_PKT_DATA_PARAM_CHANGE,
@@ -611,6 +614,7 @@ typedef struct AVPacketList {
 enum AVSideDataParamChangeFlags {
     AV_SIDE_DATA_PARAM_CHANGE_SAMPLE_RATE    = 0x0004,
     AV_SIDE_DATA_PARAM_CHANGE_DIMENSIONS     = 0x0008,
+    AV_SIDE_DATA_PARAM_CHANGE_ASPECTRATIO    = 0x8000,
 };
 
 /**
