@@ -1108,6 +1108,21 @@ static int mkv_read_header(AVFormatContext *s)
         st->need_parsing = AVSTREAM_PARSE_HEADERS;
     } else if (info->Type == TT_SUB) {
       st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
+      if (st->codec->codec_id == AV_CODEC_ID_SSA) {
+        /* HACK: Try to get the privdata of the main segments SSA track, otherwise DirectShow renderers fail */
+        unsigned num = mkv_GetNumTracks(ctx->segments[0]->matroska);
+        if (num > i) {
+          info = mkv_GetTrackInfo(ctx->segments[0]->matroska, i);
+          uint8_t *main_extradata = NULL;
+          int main_extradata_size = 0;
+          ret = mkv_generate_extradata(s, info, codec_id, &main_extradata, &main_extradata_size);
+          if (ret == 0 && main_extradata_size && main_extradata) {
+            av_freep(&st->codec->extradata);
+            st->codec->extradata = main_extradata;
+            st->codec->extradata_size = main_extradata_size;
+          }
+        }
+      }
     }
   }
 
