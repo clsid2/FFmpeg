@@ -96,6 +96,8 @@ typedef struct MatroskaDemuxContext {
   int virtual_timeline;
   int timeline_position;
 
+  Chapter *fake_edition;
+
   MatroskaSegment **segments;
   int num_segments;
   int segments_scanned;
@@ -479,7 +481,7 @@ static void mkv_process_chapter(AVFormatContext *s, Chapter *chapter, int level,
 {
   unsigned i;
   if (chapter->UID && chapter->Enabled && !chapter->Hidden) {
-    AVChapter *avchap = avpriv_new_chapter(s, (int)chapter->UID, (AVRational){1, 1000000000}, chapter->Start - offset, chapter->End - offset, chapter->Display ? chapter->Display->String : NULL);
+    AVChapter *avchap = avpriv_new_chapter(s, s->nb_chapters, (AVRational){1, 1000000000}, chapter->Start - offset, chapter->End - offset, chapter->Display ? chapter->Display->String : NULL);
 
     if (level > 0 && chapter->Display && chapter->Display->String) {
       char *title = (char *)av_mallocz(level + strlen(chapter->Display->String) + 2);
@@ -512,7 +514,7 @@ static void mkv_process_chapters(AVFormatContext *s, Chapter *edition)
   if (ctx->virtual_timeline) {
     for (i = 0; i < ctx->num_timeline; i++) {
       VirtualTimelineEntry *vt = &ctx->timeline[i];
-      mkv_process_chapter(s, vt->chapter, 0, vt->offset);
+      mkv_process_chapter(s, vt->chapter, ctx->fake_edition ? -1 : 0, vt->offset);
     }
   } else {
     mkv_process_chapter(s, edition, -1, 0);
@@ -696,6 +698,74 @@ static void mkv_process_editions(AVFormatContext *s, Chapter *editions, int coun
   mkv_switch_edition(s, edition_index);
 }
 
+static Chapter *mkv_chapter_add_child(Chapter *chapter)
+{
+  chapter->nChildren++;
+  chapter->nChildrenSize = chapter->nChildren * sizeof(Chapter);
+  chapter->Children = av_realloc(chapter->Children, chapter->nChildrenSize);
+
+  Chapter *newChapter = &chapter->Children[chapter->nChildren-1];
+  memset(newChapter, 0, sizeof(Chapter));
+  return newChapter;
+}
+
+static void mkv_process_link(AVFormatContext *s, Chapter *edition, char uid[16], int prev, int next)
+{
+  Chapter *chapters = NULL;
+  unsigned int count = 0;
+  MatroskaSegment *segment = mkv_get_segment(s, uid);
+  if (!segment) return;
+
+  if (prev && !mkv_uid_zero(segment->info->PrevUID)) {
+    mkv_process_link(s, edition, segment->info->PrevUID, 1, 0);
+  }
+
+  Chapter *chapter = mkv_chapter_add_child(edition);
+  memcpy(chapter->SegmentUID, uid, 16);
+  chapter->Enabled = 1;
+  chapter->Hidden = 1;
+  chapter->Start = 0;
+  chapter->End = segment->info->Duration;
+
+  mkv_GetChapters(segment->matroska, &chapters, &count);
+  if (count > 0) {
+    unsigned edition_index = 0, u;
+    for (u = 0; u < count; u++) {
+      if (chapters[u].Default)
+        edition_index = u;
+    }
+    chapter->Children      = chapters[edition_index].Children;
+    chapter->nChildren     = chapters[edition_index].nChildren;
+    chapter->nChildrenSize = chapters[edition_index].nChildrenSize;
+  }
+
+  if (next && !mkv_uid_zero(segment->info->NextUID)) {
+    mkv_process_link(s, edition, segment->info->NextUID, 0, 1);
+  }
+}
+
+static void mkv_process_filelinks(AVFormatContext *s, SegmentInfo *info)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  Chapter *linkingEdition = av_mallocz(sizeof(Chapter));
+  linkingEdition->Enabled = 1;
+  linkingEdition->Ordered = 1;
+
+  mkv_process_link(s, linkingEdition, info->UID, 1, 1);
+
+  if (linkingEdition->nChildren > 1) {
+    ctx->fake_edition = linkingEdition;
+    ctx->num_editions = 0;
+    av_freep(&ctx->editions);
+
+    mkv_process_editions(s, linkingEdition, 1);
+    mkv_switch_edition(s, 0);
+  } else {
+    av_freep(&linkingEdition->Children);
+    av_freep(&linkingEdition);
+  }
+}
+
 static void mkv_process_tags_edition(AVFormatContext *s, ulonglong UID, struct SimpleTag *tags, unsigned int tagCount)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
@@ -769,6 +839,11 @@ static int mkv_read_header(AVFormatContext *s)
   mkv_GetChapters(ctx->matroska, &chapters, &count);
   if (count > 0) {
     mkv_process_editions(s, chapters, count);
+  }
+
+  /* check for file linking */
+  if (!ctx->virtual_timeline) {
+    mkv_process_filelinks(s, segment->info);
   }
 
   /* Read Tags before ctx->matroska gets swapped out, but process them at the end */
@@ -1187,6 +1262,11 @@ static int mkv_read_close(AVFormatContext *s)
   av_freep(&ctx->editions);
   av_freep(&ctx->timeline);
   av_freep(&ctx->aveditions);
+
+  if (ctx->fake_edition) {
+    av_freep(&ctx->fake_edition->Children);
+    av_freep(&ctx->fake_edition);
+  }
 
   return 0;
 }
