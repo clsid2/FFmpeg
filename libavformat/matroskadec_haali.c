@@ -814,6 +814,43 @@ static void mkv_process_tags(AVFormatContext *s, Tag *tags, unsigned int tagCoun
   }
 }
 
+static void mkv_process_attachments(AVFormatContext *s, MatroskaSegment *segment)
+{
+  Attachment *attachments = NULL;
+  unsigned u, count;
+  int i;
+
+  mkv_GetAttachments(segment->matroska, &attachments, &count);
+  for (u = 0; u < count; u++) {
+    Attachment *attach = &attachments[u];
+
+    if (!(attach->Name && attach->MimeType && attach->Length > 0)) {
+      av_log(s, AV_LOG_VERBOSE, "Incomplete attachment, skipping");
+    } else {
+      AVStream *st = avformat_new_stream(s, NULL);
+      if (st == NULL)
+        break;
+      av_dict_set(&st->metadata, "filename", attach->Name, 0);
+      av_dict_set(&st->metadata, "mimetype", attach->MimeType, 0);
+      st->codec->codec_id = AV_CODEC_ID_NONE;
+      st->codec->codec_type = AVMEDIA_TYPE_ATTACHMENT;
+
+      st->codec->extradata = (uint8_t *)av_malloc((size_t)attach->Length + FF_INPUT_BUFFER_PADDING_SIZE);
+      if(st->codec->extradata == NULL)
+        break;
+      st->codec->extradata_size = (int)attach->Length;
+      aviostream_read(segment->iostream, attach->Position, st->codec->extradata, st->codec->extradata_size);
+
+      for (i=0; ff_mkv_mime_tags[i].id != AV_CODEC_ID_NONE; i++) {
+        if (!strncmp(ff_mkv_mime_tags[i].str, attach->MimeType, strlen(ff_mkv_mime_tags[i].str))) {
+          st->codec->codec_id = ff_mkv_mime_tags[i].id;
+          break;
+        }
+      }
+    }
+  }
+}
+
 static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCodecID codec_id, uint8_t **extradata_ptr, int *extradata_len)
 {
   int extradata_offset = 0, extradata_size = 0;
@@ -893,10 +930,9 @@ static int mkv_read_header(AVFormatContext *s)
   char ErrorMessage[256];
   MatroskaSegment *segment;
   Chapter *chapters = NULL;
-  Attachment *attachments = NULL;
   Tag *tags = NULL;
   unsigned int tagCount = 0;
-  unsigned int count, u;
+  unsigned int count;
 
   segment = mkv_open_segment(s, s->pb, 0);
   if (!segment)
@@ -1075,34 +1111,8 @@ static int mkv_read_header(AVFormatContext *s)
     }
   }
 
-  mkv_GetAttachments(ctx->matroska, &attachments, &count);
-  for (u = 0; u < count; u++) {
-    Attachment *attach = &attachments[u];
-
-    if (!(attach->Name && attach->MimeType && attach->Length > 0)) {
-      av_log(s, AV_LOG_VERBOSE, "Incomplete attachment, skipping");
-    } else {
-      AVStream *st = avformat_new_stream(s, NULL);
-      if (st == NULL)
-        break;
-      av_dict_set(&st->metadata, "filename", attach->Name, 0);
-      av_dict_set(&st->metadata, "mimetype", attach->MimeType, 0);
-      st->codec->codec_id = AV_CODEC_ID_NONE;
-      st->codec->codec_type = AVMEDIA_TYPE_ATTACHMENT;
-
-      st->codec->extradata = (uint8_t *)av_malloc((size_t)attach->Length + FF_INPUT_BUFFER_PADDING_SIZE);
-      if(st->codec->extradata == NULL)
-        break;
-      st->codec->extradata_size = (int)attach->Length;
-      aviostream_read(segment->iostream, attach->Position, st->codec->extradata, st->codec->extradata_size);
-
-      for (i=0; ff_mkv_mime_tags[i].id != AV_CODEC_ID_NONE; i++) {
-        if (!strncmp(ff_mkv_mime_tags[i].str, attach->MimeType, strlen(ff_mkv_mime_tags[i].str))) {
-          st->codec->codec_id = ff_mkv_mime_tags[i].id;
-          break;
-        }
-      }
-    }
+  for (i = 0; i < ctx->num_segments; i++) {
+    mkv_process_attachments(s, ctx->segments[i]);
   }
 
   if (tagCount > 0 && tags) {
