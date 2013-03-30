@@ -30,6 +30,7 @@
 #include "isom.h"
 #include "rm.h"
 #include "matroska.h"
+#include "libavcodec/bytestream.h"
 #include "libavcodec/mpeg4audio.h"
 #include "libavutil/intfloat.h"
 #include "libavutil/intreadwrite.h"
@@ -56,6 +57,7 @@ typedef struct MatroskaTrack {
   CompressedStream *cs;
   AVStream *stream;
   int ms_compat;
+  int refresh_extradata;
 } MatroskaTrack;
 
 typedef struct MatroskaSegment {
@@ -812,10 +814,82 @@ static void mkv_process_tags(AVFormatContext *s, Tag *tags, unsigned int tagCoun
   }
 }
 
+static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCodecID codec_id, uint8_t **extradata_ptr, int *extradata_len)
+{
+  int extradata_offset = 0, extradata_size = 0;
+  uint8_t *extradata = NULL;
+  AVIOContext b;
+
+  if (!strcmp(info->CodecID, "V_MS/VFW/FOURCC") && info->CodecPrivateSize >= 40 && info->CodecPrivate != NULL) {
+    extradata_offset = 40;
+  } else if (!strcmp(info->CodecID, "A_MS/ACM") && info->CodecPrivateSize >= 14 && info->CodecPrivate != NULL) {
+    extradata_offset = FFMIN(info->CodecPrivateSize, 18);
+  } else if (codec_id == AV_CODEC_ID_ALAC && info->CodecPrivateSize) {
+    /* Only ALAC's magic cookie is stored in Matroska's track headers.
+    Create the "atom size", "tag", and "tag version" fields the
+    decoder expects manually. */
+    extradata_size = 12 + info->CodecPrivateSize;
+    extradata = av_mallocz(extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    if (extradata == NULL)
+      return AVERROR(ENOMEM);
+    AV_WB32(extradata, extradata_size);
+    memcpy(&extradata[4], "alac", 4);
+    AV_WB32(&extradata[8], 0);
+    memcpy(&extradata[12], info->CodecPrivate, info->CodecPrivateSize);
+  } else if (codec_id == AV_CODEC_ID_AAC && !info->CodecPrivateSize) {
+    int profile = matroska_aac_profile(info->CodecID);
+    int sri = matroska_aac_sri(mkv_TruncFloat(info->AV.Audio.SamplingFreq));
+    extradata = (uint8_t *)av_malloc(5 + FF_INPUT_BUFFER_PADDING_SIZE);
+    if (extradata == NULL)
+      return AVERROR(ENOMEM);
+    extradata[0] = (profile << 3) | ((sri&0x0E) >> 1);
+    extradata[1] = ((sri&0x01) << 7) | (info->AV.Audio.Channels<<3);
+    if (strstr(info->CodecID, "SBR")) {
+      sri = matroska_aac_sri(mkv_TruncFloat(info->AV.Audio.OutputSamplingFreq));
+      extradata[2] = 0x56;
+      extradata[3] = 0xE5;
+      extradata[4] = 0x80 | (sri<<3);
+      extradata_size = 5;
+    } else
+      extradata_size = 2;
+  } else if (codec_id == AV_CODEC_ID_TTA) {
+    extradata_size = 30;
+    extradata = (uint8_t *)av_mallocz(extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    if (extradata == NULL)
+      return AVERROR(ENOMEM);
+    ffio_init_context(&b, extradata, extradata_size, 1, NULL, NULL, NULL, NULL);
+    avio_write(&b, "TTA1", 4);
+    avio_wl16(&b, 1);
+    avio_wl16(&b, info->AV.Audio.Channels);
+    avio_wl16(&b, info->AV.Audio.BitDepth);
+    avio_wl32(&b, mkv_TruncFloat(info->AV.Audio.OutputSamplingFreq));
+    avio_wl32(&b, s->duration * info->AV.Audio.OutputSamplingFreq);
+  }
+
+  if (*extradata_ptr)
+    av_freep(extradata_ptr);
+  *extradata_len = 0;
+
+  if (extradata) {
+    *extradata_ptr = extradata;
+    *extradata_len = extradata_size;
+  } else if(info->CodecPrivate && info->CodecPrivateSize > 0){
+    extradata_size = info->CodecPrivateSize - extradata_offset;
+    *extradata_ptr = (uint8_t *)av_mallocz(extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    if(*extradata_ptr == NULL)
+      return AVERROR(ENOMEM);
+
+    *extradata_len = extradata_size;
+    memcpy(*extradata_ptr, (uint8_t *)info->CodecPrivate + extradata_offset, extradata_size);
+  }
+
+  return 0;
+}
+
 static int mkv_read_header(AVFormatContext *s)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
-  int i, j, num_tracks;
+  int i, j, num_tracks, ret;
   char ErrorMessage[256];
   MatroskaSegment *segment;
   Chapter *chapters = NULL;
@@ -862,9 +936,6 @@ static int mkv_read_header(AVFormatContext *s)
     TrackInfo *info = mkv_GetTrackInfo(ctx->matroska, i);
     enum AVCodecID codec_id = AV_CODEC_ID_NONE;
     AVStream *st;
-    uint8_t *extradata = NULL;
-    int extradata_size = 0;
-    int extradata_offset = 0;
     uint32_t fourcc = 0;
     AVIOContext b;
 
@@ -904,35 +975,27 @@ static int mkv_read_header(AVFormatContext *s)
       return AVERROR(ENOMEM);
 
     st->id = info->Number;
+    st->start_time = 0;
+
+    avpriv_set_pts_info(st, 64, 1, 1000*1000*1000); /* 64 bit pts in ns */
+
+    ret = mkv_generate_extradata(s, info, codec_id, &st->codec->extradata, &st->codec->extradata_size);
+    if (ret < 0)
+      return ret;
 
     if (!strcmp(info->CodecID, "V_MS/VFW/FOURCC") && info->CodecPrivateSize >= 40 && info->CodecPrivate != NULL) {
       track->ms_compat = 1;
       fourcc = AV_RL32((uint8_t *)info->CodecPrivate + 16);
       codec_id = ff_codec_get_id(ff_codec_bmp_tags, fourcc);
-      extradata_offset = 40;
     } else if (!strcmp(info->CodecID, "A_MS/ACM") && info->CodecPrivateSize >= 14 && info->CodecPrivate != NULL) {
-      int ret;
       ffio_init_context(&b, (uint8_t *)info->CodecPrivate, info->CodecPrivateSize, 0, NULL, NULL, NULL, NULL);
       ret = ff_get_wav_header(s, &b, st->codec, info->CodecPrivateSize, 0);
       if (ret < 0)
         return ret;
       codec_id = st->codec->codec_id;
-      extradata_offset = FFMIN(info->CodecPrivateSize, 18);
     } else if (!strcmp(info->CodecID, "V_QUICKTIME") && (info->CodecPrivateSize >= 86) && (info->CodecPrivate != NULL)) {
       fourcc = AV_RL32(info->CodecPrivate);
       codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
-    } else if (codec_id == AV_CODEC_ID_ALAC && info->CodecPrivateSize) {
-        /* Only ALAC's magic cookie is stored in Matroska's track headers.
-           Create the "atom size", "tag", and "tag version" fields the
-           decoder expects manually. */
-        extradata_size = 12 + info->CodecPrivateSize;
-        extradata = av_mallocz(extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
-        if (extradata == NULL)
-            return AVERROR(ENOMEM);
-        AV_WB32(extradata, extradata_size);
-        memcpy(&extradata[4], "alac", 4);
-        AV_WB32(&extradata[8], 0);
-        memcpy(&extradata[12], info->CodecPrivate, info->CodecPrivateSize);
     } else if (codec_id == AV_CODEC_ID_PCM_S16BE) {
       switch (info->AV.Audio.BitDepth) {
       case  8:  codec_id = AV_CODEC_ID_PCM_U8;     break;
@@ -947,44 +1010,13 @@ static int mkv_read_header(AVFormatContext *s)
       }
     } else if (codec_id == AV_CODEC_ID_PCM_F32LE && info->AV.Audio.BitDepth == 64) {
       codec_id = AV_CODEC_ID_PCM_F64LE;
-    } else if (codec_id == AV_CODEC_ID_AAC && !info->CodecPrivateSize) {
-      int profile = matroska_aac_profile(info->CodecID);
-      int sri = matroska_aac_sri(mkv_TruncFloat(info->AV.Audio.SamplingFreq));
-      extradata = (uint8_t *)av_malloc(5 + FF_INPUT_BUFFER_PADDING_SIZE);
-      if (extradata == NULL)
-        return AVERROR(ENOMEM);
-      extradata[0] = (profile << 3) | ((sri&0x0E) >> 1);
-      extradata[1] = ((sri&0x01) << 7) | (info->AV.Audio.Channels<<3);
-      if (strstr(info->CodecID, "SBR")) {
-        sri = matroska_aac_sri(mkv_TruncFloat(info->AV.Audio.OutputSamplingFreq));
-        extradata[2] = 0x56;
-        extradata[3] = 0xE5;
-        extradata[4] = 0x80 | (sri<<3);
-        extradata_size = 5;
-      } else
-        extradata_size = 2;
-    } else if (codec_id == AV_CODEC_ID_TTA) {
-      extradata_size = 30;
-      extradata = (uint8_t *)av_mallocz(extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
-      if (extradata == NULL)
-        return AVERROR(ENOMEM);
-      ffio_init_context(&b, extradata, extradata_size, 1, NULL, NULL, NULL, NULL);
-      avio_write(&b, "TTA1", 4);
-      avio_wl16(&b, 1);
-      avio_wl16(&b, info->AV.Audio.Channels);
-      avio_wl16(&b, info->AV.Audio.BitDepth);
-      avio_wl32(&b, mkv_TruncFloat(info->AV.Audio.OutputSamplingFreq));
-      avio_wl32(&b, s->duration * info->AV.Audio.OutputSamplingFreq);
     }
-    info->CodecPrivateSize -= extradata_offset;
 
     if (codec_id == AV_CODEC_ID_NONE)
       av_log(s, AV_LOG_VERBOSE, "Unknown/unsupported CodecID: %s", info->CodecID);
-
-    avpriv_set_pts_info(st, 64, 1, 1000*1000*1000); /* 64 bit pts in ns */
-
+    /* refresh codec id, if changed above */
     st->codec->codec_id = codec_id;
-    st->start_time = 0;
+
     if (strlen(info->Language) == 0) /* default english language if none is set */
       av_dict_set(&st->metadata, "language", "eng", 0);
     else if (strcmp(info->Language, "und"))
@@ -995,19 +1027,6 @@ static int mkv_read_header(AVFormatContext *s)
       st->disposition |= AV_DISPOSITION_DEFAULT;
     if (info->Forced)
       st->disposition |= AV_DISPOSITION_FORCED;
-
-    if (!st->codec->extradata) {
-      if(extradata){
-        st->codec->extradata = extradata;
-        st->codec->extradata_size = extradata_size;
-      } else if(info->CodecPrivate && info->CodecPrivateSize > 0){
-        st->codec->extradata = (uint8_t *)av_mallocz(info->CodecPrivateSize + FF_INPUT_BUFFER_PADDING_SIZE);
-        if(st->codec->extradata == NULL)
-          return AVERROR(ENOMEM);
-        st->codec->extradata_size = info->CodecPrivateSize;
-        memcpy(st->codec->extradata, (uint8_t *)info->CodecPrivate + extradata_offset, info->CodecPrivateSize);
-      }
-    }
 
     if (info->Type == TT_VIDEO) {
       st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -1096,13 +1115,24 @@ static int mkv_read_header(AVFormatContext *s)
   return 0;
 }
 
-static void mkv_switch_segment(AVFormatContext *s, MatroskaFile *segment)
+#define TI_DIFF(field) (new->AV.field != old->AV.field)
+static int mkv_trackinfo_diff(TrackInfo *new, TrackInfo *old)
+{
+  if (new->Type == TT_VIDEO)
+    return TI_DIFF(Video.PixelWidth) || TI_DIFF(Video.PixelHeight) || TI_DIFF(Video.DisplayWidth) || TI_DIFF(Video.DisplayHeight);
+  if (new->Type == TT_AUDIO)
+    return TI_DIFF(Audio.Channels) || TI_DIFF(Audio.OutputSamplingFreq);
+
+  return 0;
+}
+
+static void mkv_switch_segment(AVFormatContext *s, MatroskaFile *segment, int force)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
   unsigned int num_tracks, u;
   char ErrorMessage[256];
 
-  if (segment == ctx->matroska)
+  if (ctx->num_segments <= 1)
     return;
 
   ctx->matroska = segment;
@@ -1114,6 +1144,10 @@ static void mkv_switch_segment(AVFormatContext *s, MatroskaFile *segment)
 
   for (u = 0; u < min(num_tracks, ctx->num_tracks); u++) {
     TrackInfo *info = mkv_GetTrackInfo(ctx->matroska, u);
+    if (force || info->Type == TT_AUDIO || (info->CodecPrivateSize && (info->CodecPrivateSize != ctx->tracks[u].info->CodecPrivateSize || memcmp(info->CodecPrivate, ctx->tracks[u].info->CodecPrivate, info->CodecPrivateSize)))
+      || mkv_trackinfo_diff(info, ctx->tracks[u].info)) {
+      ctx->tracks[u].refresh_extradata = 1;
+    }
     ctx->tracks[u].info = info;
 
     // Update compression
@@ -1155,7 +1189,7 @@ static int mkv_packet_timeline_update(AVFormatContext *s, ulonglong *start_time,
     }
     if (ctx->timeline[ctx->timeline_position].need_seek) {
       av_log(s, AV_LOG_INFO, "Seeking to timeline %d (position %I64d)\n", ctx->timeline_position, ctx->timeline[ctx->timeline_position].chapter->Start);
-      mkv_switch_segment(s, ctx->timeline[ctx->timeline_position].segment->matroska);
+      mkv_switch_segment(s, ctx->timeline[ctx->timeline_position].segment->matroska, 0);
       mkv_Seek_CueAware(ctx->matroska, ctx->timeline[ctx->timeline_position].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME);
       // Need to discard the current frame, and re-read after the seek
       return AVERROR(EAGAIN);
@@ -1170,6 +1204,48 @@ static int mkv_packet_timeline_update(AVFormatContext *s, ulonglong *start_time,
     *end_time -= ctx->timeline[ctx->timeline_position].offset;
   }
   return (flags & FRAME_EOF) ? AVERROR_EOF : 0;
+}
+
+static void mkv_packet_param_change(AVFormatContext *s, TrackInfo *info, enum AVCodecID codec_id, AVPacket *pkt)
+{
+  uint8_t *extradata = NULL;
+  int extralen = 0;
+  mkv_generate_extradata(s, info, codec_id, &extradata, &extralen);
+  if (extralen > 0) {
+    uint8_t *sidedata = av_packet_new_side_data(pkt, AV_PKT_DATA_NEW_EXTRADATA, extralen);
+    memcpy(sidedata, extradata, extralen);
+  }
+  av_freep(&extradata);
+
+  if (info->Type == TT_VIDEO) {
+    int size = 4 + 8;
+    int aspect_den = 0, aspect_num = 0;
+    int flags = AV_SIDE_DATA_PARAM_CHANGE_DIMENSIONS;
+    uint8_t *data;
+
+    if (info->AV.Video.DisplayWidth && info->AV.Video.DisplayHeight) {
+      size += 8;
+      flags |= AV_SIDE_DATA_PARAM_CHANGE_ASPECTRATIO;
+      av_reduce(&aspect_num, &aspect_den,
+        info->AV.Video.PixelHeight * info->AV.Video.DisplayWidth,
+        info->AV.Video.PixelWidth * info->AV.Video.DisplayHeight,
+        1 << 30);
+    }
+    data = av_packet_new_side_data(pkt, AV_PKT_DATA_PARAM_CHANGE, size);
+    bytestream_put_le32(&data, flags);
+    bytestream_put_le32(&data, info->AV.Video.PixelWidth);
+    bytestream_put_le32(&data, info->AV.Video.PixelHeight);
+    if (aspect_den && aspect_num) {
+      bytestream_put_le32(&data, aspect_num);
+      bytestream_put_le32(&data, aspect_den);
+    }
+  } else if (info->Type == TT_AUDIO) {
+    int flags = AV_SIDE_DATA_PARAM_CHANGE_CHANNEL_COUNT | AV_SIDE_DATA_PARAM_CHANGE_SAMPLE_RATE;
+    uint8_t *data = av_packet_new_side_data(pkt, AV_PKT_DATA_PARAM_CHANGE, 12);
+    bytestream_put_le32(&data, flags);
+    bytestream_put_le32(&data, info->AV.Audio.Channels);
+    bytestream_put_le32(&data, info->AV.Audio.OutputSamplingFreq);
+  }
 }
 
 static int mkv_read_packet(AVFormatContext *s, AVPacket *pkt)
@@ -1257,6 +1333,11 @@ again:
     }
   }
 
+  if (track->refresh_extradata) {
+    mkv_packet_param_change(s, track->info, track->stream->codec->codec_id, pkt);
+    track->refresh_extradata = 0;
+  }
+
   if (!(flags & FRAME_UNKNOWN_START)) {
     if (track->ms_compat)
       pkt->dts = start_time;
@@ -1322,7 +1403,7 @@ static int mkv_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
   /* Update timeline and segment for ordered chapters */
   if (ctx->virtual_timeline) {
     VirtualTimelineEntry *vt = mkv_get_timeline_entry(s, timestamp);
-    mkv_switch_segment(s, vt->segment->matroska);
+    mkv_switch_segment(s, vt->segment->matroska, 1);
     ctx->timeline_position = vt->index;
     timestamp += vt->offset;
   }
