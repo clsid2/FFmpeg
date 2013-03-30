@@ -1096,6 +1096,40 @@ static int mkv_read_header(AVFormatContext *s)
   return 0;
 }
 
+static void mkv_switch_segment(AVFormatContext *s, MatroskaFile *segment)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  unsigned int num_tracks, u;
+  char ErrorMessage[256];
+
+  if (segment == ctx->matroska)
+    return;
+
+  ctx->matroska = segment;
+
+  num_tracks = mkv_GetNumTracks(ctx->matroska);
+  if (num_tracks != ctx->num_tracks) {
+    av_log(s, AV_LOG_WARNING, "Number of tracks in segments is different, old: %u, new: %u", ctx->num_tracks, num_tracks);
+  }
+
+  for (u = 0; u < min(num_tracks, ctx->num_tracks); u++) {
+    TrackInfo *info = mkv_GetTrackInfo(ctx->matroska, u);
+    ctx->tracks[u].info = info;
+
+    // Update compression
+    if (ctx->tracks[u].cs) {
+      cs_Destroy(ctx->tracks[u].cs);
+      ctx->tracks[u].cs = NULL;
+    }
+    if (info->CompEnabled && info->CompMethod == COMP_ZLIB) {
+      ctx->tracks[u].cs = cs_Create(ctx->matroska, u, ErrorMessage, sizeof(ErrorMessage));
+      if (!ctx->tracks[u].cs) {
+        av_log(s, AV_LOG_ERROR, "Creating compressed stream failed: %s", ErrorMessage);
+      }
+    }
+  }
+}
+
 #define FRAME_EOF 0x00400000
 
 static int mkv_packet_timeline_update(AVFormatContext *s, ulonglong *start_time, ulonglong *end_time, unsigned flags)
@@ -1121,7 +1155,7 @@ static int mkv_packet_timeline_update(AVFormatContext *s, ulonglong *start_time,
     }
     if (ctx->timeline[ctx->timeline_position].need_seek) {
       av_log(s, AV_LOG_INFO, "Seeking to timeline %d (position %I64d)\n", ctx->timeline_position, ctx->timeline[ctx->timeline_position].chapter->Start);
-      ctx->matroska = ctx->timeline[ctx->timeline_position].segment->matroska;
+      mkv_switch_segment(s, ctx->timeline[ctx->timeline_position].segment->matroska);
       mkv_Seek_CueAware(ctx->matroska, ctx->timeline[ctx->timeline_position].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME);
       // Need to discard the current frame, and re-read after the seek
       return AVERROR(EAGAIN);
@@ -1288,7 +1322,7 @@ static int mkv_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
   /* Update timeline and segment for ordered chapters */
   if (ctx->virtual_timeline) {
     VirtualTimelineEntry *vt = mkv_get_timeline_entry(s, timestamp);
-    ctx->matroska          = vt->segment->matroska;
+    mkv_switch_segment(s, vt->segment->matroska);
     ctx->timeline_position = vt->index;
     timestamp += vt->offset;
   }
