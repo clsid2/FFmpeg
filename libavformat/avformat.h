@@ -1247,6 +1247,7 @@ typedef struct AVFormatContext {
 #endif
 #define AVFMT_FLAG_AUTO_BSF   0x200000 ///< Add bitstream filters as requested by the muxer
 
+#define AVFMT_FLAG_NOEXTERNAL     0x40000000 ///< Do not open external files referenced by the format
 #define AVFMT_FLAG_NETWORK        0x80000000 ///< Source is a network protocol, optimize for that
 
     /**
