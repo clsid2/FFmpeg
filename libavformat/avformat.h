@@ -1520,6 +1520,7 @@ typedef struct AVFormatContext {
 #define AVFMT_FLAG_LEGACY_ID3V2_COMM_KEYS 0x400000
 #endif
 
+#define AVFMT_FLAG_NOEXTERNAL     0x40000000 ///< Do not open external files referenced by the format
 #define AVFMT_FLAG_NETWORK        0x80000000 ///< Source is a network protocol, optimize for that
 
     /**
