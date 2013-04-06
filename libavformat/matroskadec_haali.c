@@ -409,8 +409,9 @@ static MatroskaSegment* mkv_get_segment(AVFormatContext *s, char uid[16])
     ulonglong base = mkv_GetSegmentTop(ctx->segments[0]->matroska);
     mkv_find_segments_avio(s, ctx->segments[0]->iostream->pb, base);
 
-    /* and for segments in other files */
-    mkv_find_segments(s);
+    /* and for segments in other files, if allowed */
+    if (!(s->flags & AVFMT_FLAG_NOEXTERNAL))
+      mkv_find_segments(s);
     ctx->segments_scanned = 1;
   }
 
