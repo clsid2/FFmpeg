@@ -1310,7 +1310,7 @@ again:
     return AVERROR_EOF;
 
   track = &ctx->tracks[track_num];
-  if (!track->stream || track->stream->discard == AVDISCARD_ALL) {
+  if (track_num >= ctx->num_tracks || !track->stream || track->stream->discard == AVDISCARD_ALL) {
     av_freep(&frame_data);
     goto again;
   }
