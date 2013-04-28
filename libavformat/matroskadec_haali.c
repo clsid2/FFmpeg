@@ -301,6 +301,7 @@ static MatroskaSegment* mkv_open_segment(AVFormatContext *s, AVIOContext *pb, ul
 
   if (!segment->matroska) {
     av_log(s, AV_LOG_ERROR, "mkv_OpenEx returned error: %s\n", ErrorMessage);
+    av_freep(&segment->iostream);
     av_freep(&segment);
     return NULL;
   }
@@ -311,47 +312,40 @@ static MatroskaSegment* mkv_open_segment(AVFormatContext *s, AVIOContext *pb, ul
   return segment;
 }
 
-static int mkv_find_segments_avio(AVFormatContext *s, AVIOContext *pb, ulonglong base)
+static int mkv_find_segment_avio(AVFormatContext *s, AVIOContext *pb, ulonglong base)
 {
   MatroskaSegment *segment;
-  int found = 0;
-  int64_t size = avio_size(pb);
 
-  if (base >= size)
+  av_log(s, AV_LOG_INFO, "Scanning for Segment at %I64d\n", base);
+
+  segment = mkv_open_segment(s, pb, base);
+
+  if (!segment)
     return 0;
 
-  while (base < size) {
-    av_log(s, AV_LOG_INFO, "Scanning for Segment at %I64d\n", base);
-    segment = mkv_open_segment(s, pb, base);
-    if (!segment)
-      break;
+  av_log(s, AV_LOG_INFO, "Found Segment with UID: %08x%08x%08x%08x\n",
+    *(unsigned int*)&segment->info->UID[0], *(unsigned int*)&segment->info->UID[4], *(unsigned int*)&segment->info->UID[8], *(unsigned int*)&segment->info->UID[12]);
 
-    av_log(s, AV_LOG_INFO, "Found Segment with UID: %08x%08x%08x%08x\n",
-      *(unsigned int*)&segment->info->UID[0], *(unsigned int*)&segment->info->UID[4], *(unsigned int*)&segment->info->UID[8], *(unsigned int*)&segment->info->UID[12]);
-
-    if (!found && base == 0) {
-      segment->free_avio = 1;
-      found = 1;
-    }
-    base = mkv_GetSegmentTop(segment->matroska);
+  if (base == 0) {
+    segment->free_avio = 1;
   }
 
-  return found;
+  return 1;
 }
 
-static void mkv_find_segments_file(AVFormatContext *s, const char *path, const char *file, ulonglong base)
+static void mkv_find_segments_file(AVFormatContext *s, const char *path, const char *file)
 {
   AVIOContext *pb = NULL;
-  int num_segments;
+  int found;
   char *filename = av_asprintf("%s/%s", path, file);
 
-  if (avio_open(&pb, filename, AVIO_FLAG_READ) < 0) {
+  if (avio_open(&pb, filename, AVIO_FLAG_READ|AVIO_FLAG_AVOID_FSTAT) < 0) {
     av_log(s, AV_LOG_ERROR, "Error opening file %s\n", filename);
     goto done;
   }
-  av_log(s, AV_LOG_INFO, "Opening %s, size %I64d...\n", filename, avio_size(pb));
-  num_segments = mkv_find_segments_avio(s, pb, base);
-  if (num_segments == 0) {
+  av_log(s, AV_LOG_INFO, "Opening %s...\n", filename);
+  found = mkv_find_segment_avio(s, pb, 0);
+  if (!found) {
     av_log(s, AV_LOG_WARNING, "File %s could not be opened as MKV\n", filename);
     avio_closep(&pb);
   }
@@ -384,7 +378,7 @@ static void mkv_find_segments(AVFormatContext *s)
 
         // Skip the main file, it was processed elsewhere
         if (av_strcasecmp(mkvFileName, file) != 0) {
-          mkv_find_segments_file(s, path, mkvFileName, 0);
+          mkv_find_segments_file(s, path, mkvFileName);
         }
         ret = _wfindnext(handle, &finddata);
       }
@@ -407,7 +401,15 @@ static MatroskaSegment* mkv_get_segment(AVFormatContext *s, char uid[16])
   if (!ctx->segments_scanned) {
     /* scan for segments within this file */
     ulonglong base = mkv_GetSegmentTop(ctx->segments[0]->matroska);
-    mkv_find_segments_avio(s, ctx->segments[0]->iostream->pb, base);
+    ulonglong size = avio_size(ctx->segments[0]->iostream->pb);
+
+    while (base < size) {
+      int found = mkv_find_segment_avio(s, ctx->segments[0]->iostream->pb, base);
+      if (!found)
+        break;
+
+      base = mkv_GetSegmentTop(ctx->segments[ctx->num_segments-1]->matroska);
+    }
 
     /* and for segments in other files, if allowed */
     if (!(s->flags & AVFMT_FLAG_NOEXTERNAL))
@@ -1393,6 +1395,7 @@ static int mkv_read_close(AVFormatContext *s)
     if (ctx->segments[i]->free_avio)
       avio_closep(&ctx->segments[i]->iostream->pb);
     av_freep(&ctx->segments[i]->iostream);
+    av_freep(&ctx->segments[i]);
   }
   av_freep(&ctx->segments);
 
