@@ -65,7 +65,9 @@ typedef struct MatroskaSegment {
   AVIOStream   *iostream;
   MatroskaFile *matroska;
   SegmentInfo  *info;
-  int free_avio;
+  char          UID[16];
+  int           free_avio;
+  int           failed;
 } MatroskaSegment;
 
 typedef struct VirtualTimelineEntry {
@@ -307,6 +309,55 @@ static MatroskaSegment* mkv_open_segment(AVFormatContext *s, AVIOContext *pb, ul
   }
 
   segment->info = mkv_GetFileInfo(segment->matroska);
+  memcpy(segment->UID, segment->info->UID, 16);
+
+  av_dynarray_add(&ctx->segments, &ctx->num_segments, segment);
+  return segment;
+}
+
+static void mkv_reopen_segment(AVFormatContext *s, MatroskaSegment *segment)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  char ErrorMessage[256];
+
+  /* reset packet size */
+  segment->iostream->pb->max_packet_size = 0;
+  ffio_set_buf_size(segment->iostream->pb, IO_BUFFER_SIZE * 4);
+
+  segment->matroska = mkv_OpenEx(&segment->iostream->base, 0, 0, ErrorMessage, sizeof(ErrorMessage));
+  if (!segment->matroska) {
+    av_log(s, AV_LOG_ERROR, "mkv_OpenEx returned error: %s\n", ErrorMessage);
+    segment->failed = 1;
+  }
+
+  segment->info = mkv_GetFileInfo(segment->matroska);
+}
+
+static MatroskaSegment* mkv_discover_segment(AVFormatContext *s, AVIOContext *pb)
+{
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  char ErrorMessage[256];
+  SegmentInfo *info;
+
+  MatroskaSegment *segment = av_mallocz(sizeof(*segment));
+  segment->index    = ctx->num_segments;
+  segment->iostream = aviostream_create(pb);
+  pb->max_packet_size = IO_BUFFER_SIZE;
+
+  segment->matroska = mkv_OpenSparse(&segment->iostream->base, ErrorMessage, sizeof(ErrorMessage));
+
+  if (!segment->matroska) {
+    av_log(s, AV_LOG_ERROR, "mkv_OpenEx returned error: %s\n", ErrorMessage);
+    av_freep(&segment->iostream);
+    av_freep(&segment);
+    return NULL;
+  }
+
+  info = mkv_GetFileInfo(segment->matroska);
+  memcpy(segment->UID, info->UID, 16);
+
+  mkv_Close(segment->matroska);
+  segment->matroska = NULL;
 
   av_dynarray_add(&ctx->segments, &ctx->num_segments, segment);
   return segment;
@@ -318,13 +369,16 @@ static int mkv_find_segment_avio(AVFormatContext *s, AVIOContext *pb, ulonglong 
 
   av_log(s, AV_LOG_INFO, "Scanning for Segment at %I64d\n", base);
 
-  segment = mkv_open_segment(s, pb, base);
+  if (base == 0)
+    segment = mkv_discover_segment(s, pb);
+  else
+    segment = mkv_open_segment(s, pb, base);
 
   if (!segment)
     return 0;
 
   av_log(s, AV_LOG_INFO, "Found Segment with UID: %08x%08x%08x%08x\n",
-    *(unsigned int*)&segment->info->UID[0], *(unsigned int*)&segment->info->UID[4], *(unsigned int*)&segment->info->UID[8], *(unsigned int*)&segment->info->UID[12]);
+    *(unsigned int*)&segment->UID[0], *(unsigned int*)&segment->UID[4], *(unsigned int*)&segment->UID[8], *(unsigned int*)&segment->UID[12]);
 
   if (base == 0) {
     segment->free_avio = 1;
@@ -395,7 +449,7 @@ static MatroskaSegment* mkv_get_segment(AVFormatContext *s, char uid[16])
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
   int i;
 
-  if (mkv_uid_zero(uid) || mkv_uid_compare(ctx->segments[0]->info->UID, uid))
+  if (mkv_uid_zero(uid) || mkv_uid_compare(ctx->segments[0]->UID, uid))
     return ctx->segments[0];
 
   if (!ctx->segments_scanned) {
@@ -418,7 +472,12 @@ static MatroskaSegment* mkv_get_segment(AVFormatContext *s, char uid[16])
   }
 
   for (i = 1; i < ctx->num_segments; i++) {
-    if (mkv_uid_compare(ctx->segments[i]->info->UID, uid)) {
+    if (!ctx->segments[i]->failed && mkv_uid_compare(ctx->segments[i]->UID, uid)) {
+      if (!ctx->segments[i]->matroska) {
+        mkv_reopen_segment(s, ctx->segments[i]);
+        if (ctx->segments[i]->failed)
+          break;
+      }
       return ctx->segments[i];
     }
   }
@@ -1130,7 +1189,8 @@ static int mkv_read_header(AVFormatContext *s)
   }
 
   for (i = 0; i < ctx->num_segments; i++) {
-    mkv_process_attachments(s, ctx->segments[i]);
+    if (ctx->segments[i]->matroska)
+      mkv_process_attachments(s, ctx->segments[i]);
   }
 
   if (tagCount > 0 && tags) {
@@ -1139,6 +1199,16 @@ static int mkv_read_header(AVFormatContext *s)
 
   /* Can only build the index after tracks are loaded */
   mkv_build_index(s);
+
+  /* close segments which were not needed for the virtual timeline */
+  for (i = 0; i < ctx->num_segments; i++) {
+    if (!ctx->segments[i]->matroska) {
+      if (ctx->segments[i]->free_avio)
+        avio_closep(&ctx->segments[i]->iostream->pb);
+      ctx->segments[i]->free_avio = 0;
+      av_freep(&ctx->segments[i]->iostream);
+    }
+  }
 
   return 0;
 }
