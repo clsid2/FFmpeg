@@ -231,7 +231,7 @@ static int file_open(URLContext *h, const char *filename, int flags)
         return AVERROR(errno);
     c->fd = fd;
 
-    h->is_streamed = !fstat(fd, &st) && S_ISFIFO(st.st_mode);
+    h->is_streamed = !(flags & AVIO_FLAG_AVOID_FSTAT) && !fstat(fd, &st) && S_ISFIFO(st.st_mode);
 
     /* Buffer writes more than the default 32k to improve throughput especially
      * with networked file systems */

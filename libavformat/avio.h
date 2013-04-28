@@ -680,6 +680,8 @@ int avio_get_str16be(AVIOContext *pb, int maxlen, char *buf, int buflen);
  */
 #define AVIO_FLAG_DIRECT 0x8000
 
+#define AVIO_FLAG_AVOID_FSTAT 0x80000000
+
 /**
  * Create and initialize a AVIOContext for accessing the
  * resource indicated by url.
