@@ -2813,6 +2813,63 @@ segment:
   mf->tcCluster = mf->firstTimecode;
 }
 
+static void parseFileSparse(MatroskaFile *mf) {
+  ulonglong len = filepos(mf), adjust;
+  unsigned  i;
+  int id = readID(mf);
+  int found_uid = 0;
+
+  if (id==EOF)
+    errorjmp(mf,"Unexpected EOF at start of file");
+
+  // files with multiple concatenated segments can have only
+  // one EBML prolog
+  if (len > 0 && id == 0x18538067)
+    goto segment;
+
+  if (id!=0x1a45dfa3)
+    errorjmp(mf,"First element in file is not EBML");
+
+  parseEBML(mf,readSize(mf));
+
+  // next we need to find the first segment
+  for (;;) {
+    id = readID(mf);
+    if (id==EOF)
+      errorjmp(mf,"No segments found in the file");
+segment:
+    len = readSizeUnspec(mf);
+    if (id == 0x18538067) // Segment
+      break;
+    if (len == MAXU64)
+      errorjmp(mf,"No segments found in the file");
+    skipbytes(mf,len);
+  }
+
+  // found it
+  mf->pSegment = filepos(mf);
+
+  // we want to read data until we find a seekhead or a trackinfo
+  FOREACH2(mf,len,0x1f43b675)
+    case 0x1549a966: // SegmentInfo
+      mf->pSegmentInfo = cur;
+      FOREACH(mf,len)
+        case 0x73a4: // SegmentUID
+          if (len != sizeof(mf->Seg.UID))
+            errorjmp(mf,"SegmentUID size is not %d bytes",mf->Seg.UID);
+          readbytes(mf,mf->Seg.UID,sizeof(mf->Seg.UID));
+          return;
+      ENDFOR(mf);
+      break;
+  ENDFOR1(mf);
+    // if we found our segment info
+    if (mf->pSegmentInfo)
+      break;
+  ENDFOR2();
+
+  errorjmp(mf,"Couldn't find SegmentInfo");
+}
+
 static void DeleteChapter(MatroskaFile *mf,struct Chapter *ch) {
   unsigned i,j;
 
@@ -2856,6 +2913,33 @@ MatroskaFile  *mkv_OpenEx(InputStream *io,
   if (setjmp(mf->jb)==0) {
     seek(mf,base);
     parseFile(mf);
+  } else { // parser error
+    mystrlcpy(err_msg,mf->errmsg,msgsize);
+    mkv_Close(mf);
+    return NULL;
+  }
+
+  return mf;
+}
+
+MatroskaFile  *mkv_OpenSparse(InputStream *io,
+                              char *err_msg,unsigned msgsize)
+{
+  MatroskaFile        *mf = io->memalloc(io,sizeof(*mf));
+  if (mf == NULL) {
+    mystrlcpy(err_msg,"Out of memory",msgsize);
+    return NULL;
+  }
+
+  memset(mf,0,sizeof(*mf));
+
+  mf->cache = io;
+  mf->flags = MKVF_AVOID_SEEKS;
+  io->progress(io,0,0);
+
+  if (setjmp(mf->jb)==0) {
+    seek(mf,0);
+    parseFileSparse(mf);
   } else { // parser error
     mystrlcpy(err_msg,mf->errmsg,msgsize);
     mkv_Close(mf);
