@@ -294,6 +294,11 @@ X MatroskaFile  *mkv_OpenEx(/* in */  InputStream *io,
 			  /* out */ char *err_msg,
 			  /* in */  unsigned msgsize);
 
+/* Open the file and only parse enough information to find the segment uid */
+X MatroskaFile  *mkv_OpenSparse(/* in */ InputStream *io,
+        /* out */ char *err_msg,
+        /* in */  unsigned msgsize);
+
 /* Close and deallocate mf
  * NULL pointer is ok and is simply ignored
  */
