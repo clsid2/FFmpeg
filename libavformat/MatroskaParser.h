@@ -341,7 +341,7 @@ X void	      mkv_Seek(/* in */ MatroskaFile *mf,
 		       /* in */	ulonglong timecode /* in ns */,
 		       /* in */ unsigned flags);
 
-X void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong timecode, unsigned flags);
+X void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong timecode, unsigned flags, unsigned fuzzy);
 
 X void	      mkv_SkipToKeyframe(MatroskaFile *mf);
 
