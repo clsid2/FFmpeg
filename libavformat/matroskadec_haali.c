@@ -1023,7 +1023,7 @@ static int mkv_read_header(AVFormatContext *s)
 
   if (ctx->virtual_timeline && ctx->timeline[0].need_seek) {
     ctx->matroska = ctx->timeline[ctx->timeline_position].segment->matroska;
-    mkv_Seek_CueAware(ctx->matroska, ctx->timeline[0].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME);
+    mkv_Seek_CueAware(ctx->matroska, ctx->timeline[0].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME, 1);
   }
 
   /* Tracks */
@@ -1288,7 +1288,7 @@ static int mkv_packet_timeline_update(AVFormatContext *s, ulonglong *start_time,
     if (ctx->timeline[ctx->timeline_position].need_seek) {
       av_log(s, AV_LOG_INFO, "Seeking to timeline %d (position %I64d)\n", ctx->timeline_position, ctx->timeline[ctx->timeline_position].chapter->Start);
       mkv_switch_segment(s, ctx->timeline[ctx->timeline_position].segment->matroska, 0);
-      mkv_Seek_CueAware(ctx->matroska, ctx->timeline[ctx->timeline_position].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME);
+      mkv_Seek_CueAware(ctx->matroska, ctx->timeline[ctx->timeline_position].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME, 1);
       // Need to discard the current frame, and re-read after the seek
       return AVERROR(EAGAIN);
     }
@@ -1512,7 +1512,7 @@ static int mkv_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
     mkv_SetTrackMask(ctx->matroska, mkv_get_track_mask(ctx));
 
   /* perform seek */
-  mkv_Seek_CueAware(ctx->matroska, timestamp, mkvflags);
+  mkv_Seek_CueAware(ctx->matroska, timestamp, mkvflags, 0);
 
   /* Update current timestamp */
   cur_dts = mkv_GetLowestQTimecode(ctx->matroska);
