@@ -3059,20 +3059,38 @@ static inline ulonglong mkv_time_diff(ulonglong one, ulonglong two)
     return two-one;
 }
 
-void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong timecode, unsigned flags)
+void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong timecode, unsigned flags, unsigned fuzzy)
 {
   if (timecode > 0 && (flags & (MKVF_SEEK_TO_PREV_KEYFRAME|MKVF_SEEK_TO_PREV_KEYFRAME_STRICT))) {
     unsigned int count, i;
+    unsigned char track = 0;
+    ulonglong default_duration = 10000000;
     Cue *cue;
+
+    for (i=0;i<mf->nTracks;++i) {
+      if (mf->Tracks[i]->Type == TT_VIDEO && !(mf->trackMask & (ULL(1)<<i))) {
+        track = mf->Tracks[i]->Number;
+        if (mf->Tracks[i]->DefaultDuration)
+          default_duration = mf->Tracks[i]->DefaultDuration;
+        break;
+      }
+    }
+
     mkv_GetCues(mf, &cue, &count);
     if (count > 0) {
+      ulonglong prevDiff = ULLONG_MAX;
+      ulonglong newTimecode = timecode;
       for (i = 0; i < count; i++) {
         ulonglong tcDiff = mkv_time_diff(cue[i].Time, timecode);
-        if (tcDiff == 0 || (cue[i].Track && cue[i].Track <= mf->nTracks && tcDiff <= mf->Tracks[cue[i].Track-1]->DefaultDuration)) {
+        if ((!track || !cue[i].Track || cue[i].Track == track) && (tcDiff == 0 || (fuzzy && tcDiff <= default_duration))) {
           flags &= ~(MKVF_SEEK_TO_PREV_KEYFRAME|MKVF_SEEK_TO_PREV_KEYFRAME_STRICT);
-          timecode = cue[i].Time;
+          if (tcDiff < prevDiff) {
+            newTimecode = cue[i].Time;
+            prevDiff = tcDiff;
+          }
         }
       }
+      timecode = newTimecode;
     }
   }
   mkv_Seek(mf, timecode, flags);
