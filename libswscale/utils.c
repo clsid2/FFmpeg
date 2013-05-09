@@ -2343,15 +2343,29 @@ SwsContext *sws_getCachedContext(SwsContext *prev, int srcW,
     static const double default_param[2] = { SWS_PARAM_DEFAULT,
                                              SWS_PARAM_DEFAULT };
 
+    enum AVPixelFormat srcFormatHandled = srcFormat, dstFormatHandled = dstFormat;
+    int src_range  = handle_jpeg(&srcFormatHandled);
+    int src_xyz    = handle_xyz(&srcFormatHandled);
+    int src_0alpha = handle_0alpha(&srcFormatHandled);
+    int dst_range  = handle_jpeg(&dstFormatHandled);
+    int dst_xyz    = handle_xyz(&dstFormatHandled);
+    int dst_0alpha = handle_0alpha(&dstFormatHandled);
+
     if (!param)
         param = default_param;
 
     if (prev && (prev->src_w            == srcW      &&
                  prev->src_h            == srcH      &&
-                 prev->src_format       == srcFormat &&
+                 prev->src_format       == srcFormatHandled &&
+                 prev->src_range        == src_range &&
+                 sws_internal(prev)->srcXYZ           == src_xyz   &&
+                 sws_internal(prev)->src0Alpha        == src_0alpha &&
                  prev->dst_w            == dstW      &&
                  prev->dst_h            == dstH      &&
-                 prev->dst_format       == dstFormat &&
+                 prev->dst_format       == dstFormatHandled &&
+                 prev->dst_range        == dst_range &&
+                 sws_internal(prev)->dstXYZ           == dst_xyz   &&
+                 sws_internal(prev)->dst0Alpha        == dst_0alpha &&
                  prev->flags            == flags     &&
                  prev->scaler_params[0] == param[0]  &&
                  prev->scaler_params[1] == param[1])) {
