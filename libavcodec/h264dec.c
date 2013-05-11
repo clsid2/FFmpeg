@@ -417,6 +417,17 @@ FF_ENABLE_DEPRECATION_WARNINGS
                ret = 0;
            }
         }
+
+        /* activate the first SPS to determine basic stream information */
+        if (!h->ps.sps) {
+            int i;
+            for (i = 0; i < FF_ARRAY_ELEMS(h->ps.pps_list) && !h->ps.sps; i++) {
+                if (h->ps.pps_list[i]) {
+                    ff_refstruct_replace(&h->ps.pps, h->ps.pps_list[i]);
+                    h->ps.sps = h->ps.pps->sps;
+                }
+            }
+        }
     }
 
     if (h->ps.sps) {
