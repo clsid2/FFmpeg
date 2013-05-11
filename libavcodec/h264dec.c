@@ -420,6 +420,19 @@ static av_cold int h264_decode_init(AVCodecContext *avctx)
             h264_decode_end(avctx);
             return ret;
         }
+
+        /* activate the first SPS to determine basic stream information */
+        if (!h->ps.sps) {
+            int i;
+            for (i = 0; i < FF_ARRAY_ELEMS(h->ps.sps_list) && !h->ps.sps; i++) {
+                if (h->ps.sps_list[i]) {
+                    h->ps.sps_ref = av_buffer_ref(h->ps.sps_list[i]);
+                    if (!h->ps.sps_ref)
+                        return AVERROR(ENOMEM);
+                    h->ps.sps = (const SPS*)h->ps.sps_ref->data;
+                }
+            }
+        }
     }
 
     if (h->ps.sps) {
