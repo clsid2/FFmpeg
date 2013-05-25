@@ -48,10 +48,14 @@
 typedef struct FrapsContext {
     AVCodecContext *avctx;
     BswapDSPContext bdsp;
+    int cur_index, prev_index;
+    int next_cur_index, next_prev_index;
+    ThreadFrame frames[2];
     uint8_t *tmpbuf;
     int tmpbuf_size;
 } FrapsContext;
 
+static av_cold int decode_end(AVCodecContext *avctx);
 
 /**
  * initializes decoder
@@ -61,11 +65,47 @@ typedef struct FrapsContext {
 static av_cold int decode_init(AVCodecContext *avctx)
 {
     FrapsContext * const s = avctx->priv_data;
+    int i;
+
+    avctx->internal->allocate_progress = 1;
+
+    s->prev_index = 0;
+    s->cur_index = 1;
 
     s->avctx  = avctx;
     s->tmpbuf = NULL;
 
     ff_bswapdsp_init(&s->bdsp);
+
+    for (i = 0; i < FF_ARRAY_ELEMS(s->frames); i++) {
+        s->frames[i].f = av_frame_alloc();
+        if (!s->frames[i].f) {
+            decode_end(avctx);
+            return AVERROR(ENOMEM);
+        }
+    }
+
+    return 0;
+}
+
+static int update_thread_context(AVCodecContext *avctx, const AVCodecContext *avctx_from)
+{
+    FrapsContext *dst = avctx->priv_data, *src = avctx_from->priv_data;
+    int i, ret;
+
+    if (avctx == avctx_from) return 0;
+
+    dst->cur_index  = src->next_cur_index;
+    dst->prev_index = src->next_prev_index;
+
+    for (i = 0; i < FF_ARRAY_ELEMS(dst->frames); i++) {
+        ff_thread_release_buffer(avctx, &dst->frames[i]);
+        if (src->frames[i].f->data[0]) {
+            ret = ff_thread_ref_frame(&dst->frames[i], &src->frames[i]);
+            if (ret < 0)
+                return ret;
+        }
+    }
 
     return 0;
 }
@@ -129,6 +169,38 @@ static int fraps2_decode_plane(FrapsContext *s, uint8_t *dst, int stride, int w,
     return 0;
 }
 
+static void frame_copy(FrapsContext *s,
+                       uint8_t *dst_data[3], const int dst_linesizes[3],
+                       uint8_t *src_data[3], const int src_linesizes[3],
+                       unsigned int version, int width, int height)
+{
+    int i, k, h, bwidth;
+    uint8_t *src, *dst;
+    int planes = (version & 1) ? 1 : 3;
+
+    for (i = 0; i < planes; i++) {
+        dst = dst_data[i];
+        src = src_data[i];
+        if (version & 1) {
+            /* RGB data */
+            h = height;
+            bwidth = width * 3;
+        } else {
+            /* YUV 4:2:0 data */
+            h = i ? height >> 1 : height;
+            bwidth = i ? width >> 1 : width;
+        }
+
+        ff_thread_await_progress(&s->frames[s->prev_index], i, 0);
+        for (k = 0; k < h; k++) {
+            memcpy(dst, src, bwidth);
+            dst += dst_linesizes[i];
+            src += src_linesizes[i];
+        }
+        ff_thread_report_progress(&s->frames[s->cur_index], i, 0);
+    }
+}
+
 static int decode_frame(AVCodecContext *avctx,
                         void *data, int *got_frame,
                         AVPacket *avpkt)
@@ -136,15 +208,15 @@ static int decode_frame(AVCodecContext *avctx,
     FrapsContext * const s = avctx->priv_data;
     const uint8_t *buf     = avpkt->data;
     int buf_size           = avpkt->size;
-    ThreadFrame frame = { .f = data };
-    AVFrame * const f = data;
+    ThreadFrame *frame, *prev_frame;
+    AVFrame *f;
     uint32_t header;
     unsigned int version,header_size;
     unsigned int x, y;
     const uint32_t *buf32;
     uint32_t *luma1,*luma2,*cb,*cr;
     uint32_t offs[4];
-    int i, j, ret, is_chroma;
+    int i, j, ret, is_chroma, is_Pframe;
     const int planes = 3;
     int is_pal;
     uint8_t *out;
@@ -153,6 +225,10 @@ static int decode_frame(AVCodecContext *avctx,
         av_log(avctx, AV_LOG_ERROR, "Packet is too short\n");
         return AVERROR_INVALIDDATA;
     }
+
+    frame = &s->frames[s->cur_index];
+    prev_frame = &s->frames[s->prev_index];
+    f = frame->f;
 
     header      = AV_RL32(buf);
     version     = header & 0xff;
@@ -180,22 +256,16 @@ static int decode_frame(AVCodecContext *avctx,
         if (version == 0) needed_size /= 2;
         needed_size += header_size;
         /* bit 31 means same as previous pic */
-        if (header & (1U<<31)) {
-            *got_frame = 0;
-            return buf_size;
-        }
-        if (buf_size != needed_size) {
+        is_Pframe = (header & (1U<<31)) ? 1 : 0;
+        if (!is_Pframe && buf_size != needed_size) {
             av_log(avctx, AV_LOG_ERROR,
                    "Invalid frame length %d (should be %d)\n",
                    buf_size, needed_size);
             return AVERROR_INVALIDDATA;
         }
     } else {
-        /* skip frame */
-        if (buf_size == 8) {
-            *got_frame = 0;
-            return buf_size;
-        }
+        is_Pframe = buf_size == 8 ? 1 : 0;
+        if (!is_Pframe) {
         if (AV_RL32(buf) != FPS_TAG || buf_size < planes*1024 + 24) {
             av_log(avctx, AV_LOG_ERROR, "error in data stream\n");
             return AVERROR_INVALIDDATA;
@@ -213,18 +283,42 @@ static int decode_frame(AVCodecContext *avctx,
             if (!s->tmpbuf)
                 return AVERROR(ENOMEM);
         }
+        }
     }
 
-    f->pict_type = AV_PICTURE_TYPE_I;
-    f->key_frame = 1;
+    if (is_Pframe && !prev_frame->f->data[0]) {
+        av_log(avctx, AV_LOG_ERROR, "decoding must start with keyframe\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    ff_thread_release_buffer(avctx, frame);
+
+    f->pict_type = is_Pframe ? AV_PICTURE_TYPE_P : AV_PICTURE_TYPE_I;
+    f->key_frame = is_Pframe ? 0 : 1;
 
     avctx->pix_fmt = version & 1 ? is_pal ? AV_PIX_FMT_PAL8 : AV_PIX_FMT_BGR24 : AV_PIX_FMT_YUVJ420P;
     avctx->color_range = version & 1 ? AVCOL_RANGE_UNSPECIFIED
                                      : AVCOL_RANGE_JPEG;
     avctx->colorspace = version & 1 ? AVCOL_SPC_UNSPECIFIED : AVCOL_SPC_BT709;
 
-    if ((ret = ff_thread_get_buffer(avctx, &frame, 0)) < 0)
+    if ((ret = ff_thread_get_buffer(avctx, frame, AV_GET_BUFFER_FLAG_REF)) < 0)
         return ret;
+
+    s->next_prev_index = s->cur_index;
+    s->next_cur_index  = (s->cur_index - 1) & 1;
+
+    ff_thread_finish_setup(avctx);
+
+    /* Copy previous frame */
+    if (is_Pframe) {
+        frame_copy(s,
+                   frame->f->data,
+                   frame->f->linesize,
+                   prev_frame->f->data,
+                   prev_frame->f->linesize,
+                   version, avctx->width, avctx->height);
+        goto end;
+    }
 
     switch (version) {
     case 0:
@@ -251,6 +345,7 @@ static int decode_frame(AVCodecContext *avctx,
                 *cb++    = *buf32++;
             }
         }
+        ff_thread_report_progress(frame, INT_MAX, 0);
         break;
 
     case 1:
@@ -273,6 +368,7 @@ static int decode_frame(AVCodecContext *avctx,
                        &buf[y * avctx->width * 3],
                        3 * avctx->width);
         }
+        ff_thread_report_progress(frame, INT_MAX, 0);
         break;
 
     case 2:
@@ -289,8 +385,13 @@ static int decode_frame(AVCodecContext *avctx,
                                            buf + offs[i], offs[i + 1] - offs[i],
                                            is_chroma, 1)) < 0) {
                 av_log(avctx, AV_LOG_ERROR, "Error decoding plane %i\n", i);
-                return ret;
-            }
+                if (avctx->active_thread_type & FF_THREAD_FRAME) {
+                    ff_thread_report_progress(frame, INT_MAX, 0);
+                    break;
+                } else
+                    return ret;
+            } else
+                ff_thread_report_progress(frame, i, 0);
         }
         break;
     case 3:
@@ -301,7 +402,10 @@ static int decode_frame(AVCodecContext *avctx,
                                            -f->linesize[0], avctx->width, avctx->height,
                                            buf + offs[i], offs[i + 1] - offs[i], 0, 3)) < 0) {
                 av_log(avctx, AV_LOG_ERROR, "Error decoding plane %i\n", i);
-                return ret;
+                if (avctx->active_thread_type & FF_THREAD_FRAME)
+                    break;
+                else
+                    return ret;
             }
         }
         out = f->data[0];
@@ -315,14 +419,39 @@ static int decode_frame(AVCodecContext *avctx,
             }
             out += f->linesize[0] - 3*avctx->width;
         }
+        ff_thread_report_progress(frame, INT_MAX, 0);
         break;
     }
 
+end:
+    if ((ret = av_frame_ref(data, frame->f)) < 0)
+        return ret;
     *got_frame = 1;
+
+    s->prev_index = s->next_prev_index;
+    s->cur_index  = s->next_cur_index;
+
+    /* Only release frames that aren't used anymore */
+    ff_thread_release_buffer(avctx, &s->frames[s->cur_index]);
 
     return buf_size;
 }
 
+static av_cold int init_thread_copy(AVCodecContext *avctx)
+{
+    FrapsContext *s = avctx->priv_data;
+    int i;
+
+    for (i = 0; i < FF_ARRAY_ELEMS(s->frames); i++) {
+        s->frames[i].f = av_frame_alloc();
+        if (!s->frames[i].f) {
+            decode_end(avctx);
+            return AVERROR(ENOMEM);
+        }
+    }
+
+    return 0;
+}
 
 /**
  * closes decoder
@@ -332,8 +461,16 @@ static int decode_frame(AVCodecContext *avctx,
 static av_cold int decode_end(AVCodecContext *avctx)
 {
     FrapsContext *s = (FrapsContext*)avctx->priv_data;
+    int i;
 
     av_freep(&s->tmpbuf);
+
+    for (i = 0; i < FF_ARRAY_ELEMS(s->frames); i++) {
+        if (s->frames[i].f)
+            ff_thread_release_buffer(avctx, &s->frames[i]);
+        av_frame_free(&s->frames[i].f);
+    }
+
     return 0;
 }
 
@@ -349,4 +486,6 @@ AVCodec ff_fraps_decoder = {
     .decode         = decode_frame,
     .capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
+    .update_thread_context = ONLY_IF_THREADS_ENABLED(update_thread_context),
+    .init_thread_copy      = ONLY_IF_THREADS_ENABLED(init_thread_copy),
 };
