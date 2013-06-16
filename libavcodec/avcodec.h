@@ -2352,6 +2352,13 @@ typedef struct AVCodecContext {
      * - encoding: set by user
      */
     int export_side_data;
+
+    /**
+     * Is the stream completely progressive?
+     * - decoding: set by avcodec
+     * - encoding: unused
+     */
+    int progressive_sequence;
 } AVCodecContext;
 
 #if FF_API_CODEC_GET_SET
