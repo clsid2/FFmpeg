@@ -1069,6 +1069,7 @@ static int h264_init_ps(H264Context *h, const H264SliceContext *sl, int first_sl
         h->avctx->profile = ff_h264_get_profile(sps);
         h->avctx->level   = sps->level_idc;
         h->avctx->refs    = sps->ref_frame_count;
+        h->avctx->progressive_sequence = sps->frame_mbs_only_flag;
 
         h->mb_width  = sps->mb_width;
         h->mb_height = sps->mb_height;
