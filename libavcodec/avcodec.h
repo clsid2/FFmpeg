@@ -3705,6 +3705,13 @@ typedef struct AVCodecContext {
      * (with the display dimensions being determined by the crop_* fields).
      */
     int apply_cropping;
+
+    /**
+     * Is the stream completely progressive?
+     * - decoding: set by avcodec
+     * - encoding: unused
+     */
+    int progressive_sequence;
 } AVCodecContext;
 
 AVRational av_codec_get_pkt_timebase         (const AVCodecContext *avctx);

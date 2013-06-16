@@ -1427,6 +1427,7 @@ static void mpeg_decode_sequence_extension(Mpeg1Context *s1)
     skip_bits(&s->gb, 1); /* profile and level esc*/
     s->avctx->profile       = get_bits(&s->gb, 3);
     s->avctx->level         = get_bits(&s->gb, 4);
+    s->avctx->progressive_sequence =
     s->progressive_sequence = get_bits1(&s->gb);   /* progressive_sequence */
     s->chroma_format        = get_bits(&s->gb, 2); /* chroma_format 1=420, 2=422, 3=444 */
 
@@ -2169,6 +2170,7 @@ static int mpeg1_decode_sequence(AVCodecContext *avctx,
     s->height = height;
 
     /* We set MPEG-2 parameters so that it emulates MPEG-1. */
+    s->avctx->progressive_sequence =
     s->progressive_sequence = 1;
     s->progressive_frame    = 1;
     s->picture_structure    = PICT_FRAME;
@@ -2225,6 +2227,7 @@ static int vcr2_init_sequence(AVCodecContext *avctx)
         s->chroma_inter_matrix[j] = v;
     }
 
+    s->avctx->progressive_sequence =
     s->progressive_sequence  = 1;
     s->progressive_frame     = 1;
     s->picture_structure     = PICT_FRAME;
