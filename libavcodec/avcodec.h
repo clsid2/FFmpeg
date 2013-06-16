@@ -2051,6 +2051,13 @@ typedef struct AVCodecContext {
     int (*get_encode_buffer)(struct AVCodecContext *s, AVPacket *pkt, int flags);
 
     /**
+     * Is the stream completely progressive?
+     * - decoding: set by avcodec
+     * - encoding: unused
+     */
+    int progressive_sequence;
+
+    /**
      * Audio channel layout.
      * - encoding: must be set by the caller, to one of AVCodec.ch_layouts.
      * - decoding: may be set by the caller if known e.g. from the container.
