@@ -316,6 +316,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
         if (err < 0)
             return err;
 
+        dst->progressive_sequence = src->progressive_sequence;
+
         if (!!dst->hw_frames_ctx != !!src->hw_frames_ctx ||
             (dst->hw_frames_ctx && dst->hw_frames_ctx->data != src->hw_frames_ctx->data)) {
             av_buffer_unref(&dst->hw_frames_ctx);
