@@ -284,6 +284,8 @@ static int update_context_from_thread(AVCodecContext *dst, AVCodecContext *src, 
         dst->channel_layout = src->channel_layout;
         dst->internal->hwaccel_priv_data = src->internal->hwaccel_priv_data;
 
+        dst->progressive_sequence = src->progressive_sequence;
+
         if (!!dst->hw_frames_ctx != !!src->hw_frames_ctx ||
             (dst->hw_frames_ctx && dst->hw_frames_ctx->data != src->hw_frames_ctx->data)) {
             av_buffer_unref(&dst->hw_frames_ctx);
