@@ -1878,6 +1878,13 @@ typedef struct AVCodecContext {
     int64_t frame_num;
 
     /**
+     * Is the stream completely progressive?
+     * - decoding: set by avcodec
+     * - encoding: unused
+     */
+    int progressive_sequence;
+
+    /**
      * Decoding only. May be set by the caller before avcodec_open2() to an
      * av_malloc()'ed array (or via AVOptions). Owned and freed by the decoder
      * afterwards.
