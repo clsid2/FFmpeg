@@ -221,7 +221,7 @@ static int file_open(URLContext *h, const char *filename, int flags)
         if (c->trunc)
             access |= O_TRUNC;
     } else {
-        access = O_RDONLY;
+        access = O_RDONLY | O_SEQUENTIAL;
     }
 #ifdef O_BINARY
     access |= O_BINARY;
