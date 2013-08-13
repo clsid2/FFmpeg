@@ -125,14 +125,14 @@ static int vorbis_parse_single_comment(AVFormatContext *as, AVDictionary **m,
             goto end;
         }
         ret = av_base64_decode(pict, v, len);
-        if (ret > 0)
+        if (as && ret > 0)
             ret = ff_flac_parse_picture(as, &pict, ret, 0);
         av_freep(&pict);
         if (ret < 0) {
             av_log(as, AV_LOG_WARNING, "Failed to parse cover art block.\n");
             goto end;
         }
-    } else if (!ogm_chapter(as, t, v)) {
+    } else if (!as || !ogm_chapter(as, t, v)) {
         (*updates)++;
         if (av_dict_get(*m, t, NULL, 0))
             av_dict_set(m, t, ";", AV_DICT_APPEND);
