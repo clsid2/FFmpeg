@@ -962,7 +962,7 @@ static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCo
     avio_wl16(&b, info->AV.Audio.Channels);
     avio_wl16(&b, info->AV.Audio.BitDepth);
     avio_wl32(&b, mkv_TruncFloat(info->AV.Audio.OutputSamplingFreq));
-    avio_wl32(&b, s->duration * info->AV.Audio.OutputSamplingFreq);
+    avio_wl32(&b, av_rescale(s->duration, info->AV.Audio.OutputSamplingFreq, AV_TIME_BASE));
   } else if (codec_id == AV_CODEC_ID_WAVPACK) {
     return 0;
   }
