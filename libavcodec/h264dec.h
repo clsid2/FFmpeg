@@ -59,7 +59,7 @@
  * The maximum number of slices supported by the decoder.
  * must be a power of 2
  */
-#define MAX_SLICES 32
+#define MAX_SLICES 256
 
 #ifdef ALLOW_INTERLACE
 #define MB_MBAFF(h)    (h)->mb_mbaff
