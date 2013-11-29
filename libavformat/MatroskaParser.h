@@ -383,7 +383,8 @@ X int	      mkv_ReadFrame(/* in */  MatroskaFile *mf,
 			    /* out */ ulonglong *FilePos /* in bytes from start of file */,
 			    /* out */ unsigned int *FrameSize /* in bytes */,
 			    /* out */ char **FrameData,
-			    /* out */ unsigned int *FrameFlags);
+			    /* out */ unsigned int *FrameFlags,
+			    /* out */ longlong *FrameDiscard);
 
 #ifdef MATROSKA_COMPRESSION_SUPPORT
 /* Compressed streams support */
