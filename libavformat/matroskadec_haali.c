@@ -1530,7 +1530,7 @@ again:
         av_free_packet(pkt);
         return ret;
     }
-    av_buffer_unref(pkt->buf);
+    av_buffer_unref(&pkt->buf);
     av_packet_from_data(pkt, wv_data, wv_size);
   } else if (track->stream->codec->codec_id == AV_CODEC_ID_DVB_SUBTITLE && pkt->size >= 2 && AV_RB16(pkt->data) != 0x2000) {
     int dvbsize = pkt->size + 2;
@@ -1538,7 +1538,7 @@ again:
     AV_WB16(dvbdata, 0x2000);
     memcpy(dvbdata+2, pkt->data, pkt->size);
     memset(dvbdata+dvbsize, 0, FF_INPUT_BUFFER_PADDING_SIZE);
-    av_buffer_unref(pkt->buf);
+    av_buffer_unref(&pkt->buf);
     av_packet_from_data(pkt, dvbdata, dvbsize);
   }
 
