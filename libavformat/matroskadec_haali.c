@@ -1170,6 +1170,12 @@ static int mkv_read_header(AVFormatContext *s)
       st->codec->channels = info->AV.Audio.Channels;
       if (st->codec->codec_id != AV_CODEC_ID_AAC && st->codec->codec_id != AV_CODEC_ID_MLP && st->codec->codec_id != AV_CODEC_ID_TRUEHD)
         st->need_parsing = AVSTREAM_PARSE_HEADERS;
+      if (track->info->CodecDelay > 0) {
+        st->codec->delay = av_rescale_q(track->info->CodecDelay, (AVRational){1, 1000000000}, (AVRational){1, st->codec->sample_rate});
+      }
+      if (track->info->SeekPreRoll > 0) {
+        av_codec_set_seek_preroll(st->codec, av_rescale_q(track->info->SeekPreRoll, (AVRational){1, 1000000000}, (AVRational){1, st->codec->sample_rate}));
+      }
     } else if (info->Type == TT_SUB) {
       st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
       if (st->codec->codec_id == AV_CODEC_ID_SSA) {
@@ -1543,9 +1549,9 @@ again:
 
   if (!(flags & FRAME_UNKNOWN_START)) {
     if (track->ms_compat)
-      pkt->dts = start_time;
+      pkt->dts = start_time - track->info->CodecDelay;
     else
-      pkt->pts = start_time;
+      pkt->pts = start_time - track->info->CodecDelay;
 
     if (track->info->Type == TT_SUB)
       pkt->convergence_duration = end_time - start_time;
