@@ -1443,6 +1443,7 @@ static int mkv_read_packet(AVFormatContext *s, AVPacket *pkt)
   int ret;
   unsigned int size, flags, track_num;
   ulonglong start_time, end_time, pos;
+  longlong discard_padding;
   MatroskaTrack *track;
   char *frame_data = NULL;
 
@@ -1456,7 +1457,7 @@ static int mkv_read_packet(AVFormatContext *s, AVPacket *pkt)
   }
 
 again:
-  ret = mkv_ReadFrame(ctx->matroska, mask, &track_num, &start_time, &end_time, &pos, &size, &frame_data, &flags);
+  ret = mkv_ReadFrame(ctx->matroska, mask, &track_num, &start_time, &end_time, &pos, &size, &frame_data, &flags, &discard_padding);
   if (ctx->virtual_timeline) {
     if (ret < 0)
       ret = mkv_packet_timeline_update(s, 0, 0, FRAME_EOF);
@@ -1545,6 +1546,26 @@ again:
   if (track->refresh_extradata) {
     mkv_packet_param_change(s, track->info, track->stream->codec->codec_id, pkt);
     track->refresh_extradata = 0;
+  }
+
+  if (discard_padding) {
+    uint8_t *side_data = av_packet_new_side_data(pkt,
+                                                 AV_PKT_DATA_SKIP_SAMPLES,
+                                                 10);
+    if(side_data == NULL) {
+      av_free_packet(pkt);
+      return AVERROR(ENOMEM);
+    }
+    discard_padding = av_rescale_q(discard_padding,
+                                   (AVRational){1, 1000000000},
+                                   (AVRational){1, track->stream->codec->sample_rate});
+    if (discard_padding > 0) {
+      AV_WL32(side_data, 0);
+      AV_WL32(side_data + 4, discard_padding);
+    } else {
+      AV_WL32(side_data, -discard_padding);
+      AV_WL32(side_data + 4, 0);
+    }
   }
 
   if (!(flags & FRAME_UNKNOWN_START)) {
