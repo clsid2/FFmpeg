@@ -1397,6 +1397,12 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
         errorjmp(mf,"Track number in TrackOverlay is too large: %d",(int)v);
       t.TrackOverlay = (unsigned char)v;
       break;
+    case 0x56aa: // CodecDelay
+      t.CodecDelay = readUInt(mf, (unsigned)len);
+      break;
+    case 0x56bb: // SeekPreRoll
+      t.SeekPreRoll = readUInt(mf, (unsigned)len);
+      break;
     case 0xe0: // VideoInfo
       parseVideoInfo(mf,len,&t);
       break;
