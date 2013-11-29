@@ -117,6 +117,8 @@ struct QueueEntry {
   ulonglong            End;
   ulonglong            Position;
 
+  longlong             DiscardPadding;
+
   unsigned int         flags;
 };
 
@@ -2161,6 +2163,7 @@ static void parseBlockAdditions(MatroskaFile *mf, ulonglong toplen, ulonglong ti
         qe->Data = (char *)add_data;
         qe->flags = FRAME_UNKNOWN_START | FRAME_UNKNOWN_END |
           (((unsigned)add_id << FRAME_STREAM_SHIFT) & FRAME_STREAM_MASK);
+        qe->DiscardPadding = 0;
 
         QPut(&mf->Queues[track],qe);
       } else if(add_data) {
@@ -2174,6 +2177,7 @@ static void parseBlockGroup(MatroskaFile *mf,ulonglong toplen,ulonglong timecode
   ulonglong        v;
   ulonglong        duration = 0;
   ulonglong        dpos;
+  longlong         discard = 0;
   struct QueueEntry *qe,*qf = NULL;
   unsigned char        have_duration = 0, have_block = 0;
   unsigned char        gap = 0;
@@ -2297,6 +2301,7 @@ found:
           qe->flags |= FRAME_GAP;
         if (i > 0)
           qe->flags |= FRAME_UNKNOWN_START;
+        qe->DiscardPadding = 0;
 
         QPut(&mf->Queues[tracknum],qe);
 
@@ -2321,6 +2326,9 @@ found:
         parseBlockAdditions(mf, len, timecode, tracknum);
       else
         skipbytes(mf, len);
+      break;
+    case 0x75a2: // DiscardPadding
+      discard = readSInt(mf,(unsigned)len);
       break;
   ENDFOR(mf);
 
@@ -2365,6 +2373,7 @@ out:
       qf->End = qf->Start + mf->Tracks[tracknum]->DefaultDuration;
       qf->flags &= ~FRAME_UNKNOWN_END;
     }
+    qf->DiscardPadding = discard;
   }
 
   if (ref)
@@ -3339,7 +3348,7 @@ int              mkv_ReadFrame(MatroskaFile *mf,
                             ulonglong mask,unsigned int *track,
                             ulonglong *StartTime,ulonglong *EndTime,
                             ulonglong *FilePos,unsigned int *FrameSize,
-                            char **FrameData,unsigned int *FrameFlags)
+                            char **FrameData,unsigned int *FrameFlags, longlong *FrameDiscard)
 {
   unsigned int            i,j;
   struct QueueEntry *qe;
@@ -3371,6 +3380,7 @@ int              mkv_ReadFrame(MatroskaFile *mf,
       *FrameSize = qe->Length;
       *FrameData = qe->Data;
       *FrameFlags = qe->flags;
+      *FrameDiscard = qe->DiscardPadding;
 
       qe->Data = NULL;
       QFree(mf,qe);
