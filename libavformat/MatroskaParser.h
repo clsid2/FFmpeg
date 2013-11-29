@@ -121,6 +121,8 @@ struct TrackInfo {
   ulonglong	  MinCache;
   ulonglong	  MaxCache;
   ulonglong	  DefaultDuration;
+  ulonglong	  CodecDelay;
+  ulonglong	  SeekPreRoll;
   MKFLOAT	  TimecodeScale;
   void		  *CodecPrivate;
   unsigned	  CodecPrivateSize;
