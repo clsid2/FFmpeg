@@ -402,6 +402,7 @@ typedef struct VC1Context{
 
     int parse_only;              ///< Context is used within parser
     int resync_marker;           ///< could this stream contain resync markers
+    int recovered;
 
     DECLARE_ALIGNED_32(int16_t, blocks)[6][64];
 } VC1Context;
