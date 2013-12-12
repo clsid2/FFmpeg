@@ -1066,6 +1066,13 @@ static int vc1_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     else
         s->current_picture.f->flags &= ~AV_FRAME_FLAG_KEY;
 
+    if (!v->recovered && !(avctx->flags2 & AV_CODEC_FLAG2_SHOW_ALL)) {
+        if (s->pict_type == AV_PICTURE_TYPE_I)
+            v->recovered = 1;
+        else
+            goto err;
+    }
+
     /* skip B-frames if we don't have reference frames */
     if (!s->last_picture_ptr && s->pict_type == AV_PICTURE_TYPE_B) {
         av_log(v->s.avctx, AV_LOG_DEBUG, "Skipping B frame without reference frames\n");
@@ -1402,6 +1409,14 @@ err:
     return ret;
 }
 
+static void vc1_decode_flush(AVCodecContext *avctx)
+{
+    VC1Context *v = avctx->priv_data;
+
+    ff_mpeg_flush(avctx);
+
+    v->recovered = 0;
+}
 
 static const enum AVPixelFormat vc1_hwaccel_pixfmt_list_420[] = {
 #if CONFIG_VC1_DXVA2_HWACCEL
@@ -1433,7 +1448,7 @@ const FFCodec ff_vc1_decoder = {
     .init           = vc1_decode_init,
     .close          = ff_vc1_decode_end,
     FF_CODEC_DECODE_CB(vc1_decode_frame),
-    .flush          = ff_mpeg_flush,
+    .flush          = vc1_decode_flush,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
     .p.pix_fmts     = vc1_hwaccel_pixfmt_list_420,
     .hw_configs     = (const AVCodecHWConfigInternal *const []) {
@@ -1470,7 +1485,7 @@ const FFCodec ff_wmv3_decoder = {
     .init           = vc1_decode_init,
     .close          = ff_vc1_decode_end,
     FF_CODEC_DECODE_CB(vc1_decode_frame),
-    .flush          = ff_mpeg_flush,
+    .flush          = vc1_decode_flush,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
     .p.pix_fmts     = vc1_hwaccel_pixfmt_list_420,
     .hw_configs     = (const AVCodecHWConfigInternal *const []) {
