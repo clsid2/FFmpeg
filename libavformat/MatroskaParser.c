@@ -1156,7 +1156,7 @@ static void parseVideoInfo(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *t
       break;
     case 0x53b8: // StereoMode
       v = readUInt(mf,(unsigned)len);
-      if (v>3)
+      if (v>14)
         errorjmp(mf,"Invalid stereo mode");
       ti->AV.Video.StereoMode = (unsigned char)v;
       break;
