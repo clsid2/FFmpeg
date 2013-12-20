@@ -144,6 +144,7 @@ struct MatroskaFile {
   ulonglong   bufbase; // file offset of the first byte in buffer
   int              bufpos; // current read position in buffer
   int              buflen; // valid bytes in buffer
+  char             *cpbuf;
 
   // error reporting
   char              errmsg[128];
@@ -1372,10 +1373,10 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
     case 0x63a2: // CodecPrivate
       if (cp)
         errorjmp(mf,"Duplicate CodecPrivate");
-      if (len>2097152) // 2MB
+      if (len>33554432) // 32MB
         errorjmp(mf,"CodecPrivate is too large: %d",(int)len);
       cplen = (unsigned)len;
-      cp = alloca(cplen);
+      mf->cpbuf = cp = mf->cache->memrealloc(mf->cache, mf->cpbuf, cplen);
       readbytes(mf,cp,(int)cplen);
       break;
     case 0x258688: // CodecName
@@ -1478,7 +1479,7 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
   // header removal compression
   if (t.CompEnabled && (CompScope & 2)) {
     if (t.CompMethod == COMP_PREPEND && cslen > 0) {
-      cp = mf->cache->memrealloc(mf->cache, cp, cplen + cslen);
+      mf->cpbuf = cp = mf->cache->memrealloc(mf->cache, mf->cpbuf, cplen + cslen);
       memmove(cp+cslen, cp, cplen);
       memcpy(cp, cs, cslen);
       cplen += cslen;
@@ -1509,7 +1510,7 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
         errorjmp(mf, "invalid compressed data in CodecPrivate");
 
       ncplen = zs.total_out;
-      ncp = alloca(ncplen);
+      ncp = mf->cache->memalloc(mf->cache, ncplen);
 
       inflateReset(&zs);
 
@@ -1518,12 +1519,15 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
       zs.next_out = ncp;
       zs.avail_out = ncplen;
 
-      if (inflate(&zs, Z_FINISH) != Z_STREAM_END)
+      if (inflate(&zs, Z_FINISH) != Z_STREAM_END) {
+        mf->cache->memfree(mf->cache, ncp);
         errorjmp(mf, "inflate failed");
+      }
 
       inflateEnd(&zs);
 
-      cp = (char *)ncp;
+      mf->cache->memfree(mf->cache, cp);
+      mf->cpbuf = cp = (char *)ncp;
       cplen = ncplen;
     }
 #endif
@@ -1552,6 +1556,8 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
     tp->CodecPrivate = tp+1;
     tp->CodecPrivateSize = (unsigned)cplen;
     memcpy(tp->CodecPrivate,cp,cplen);
+    mf->cache->memfree(mf->cache, mf->cpbuf);
+    mf->cpbuf = cp = NULL;
   }
   if (cslen) {
     tp->CompMethodPrivate = (char *)(tp+1) + cplen;
@@ -3018,6 +3024,7 @@ void              mkv_Close(MatroskaFile *mf) {
   }
   mf->cache->memfree(mf->cache,mf->Tags);
 
+  mf->cache->memfree(mf->cache, mf->cpbuf);
   mf->cache->memfree(mf->cache,mf);
 }
 
