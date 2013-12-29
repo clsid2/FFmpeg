@@ -546,9 +546,6 @@ static void flush_dpb(AVCodecContext *avctx)
     ff_h264_unref_picture(h, &h->cur_pic);
 
     h->mb_y = 0;
-
-    ff_h264_free_tables(h);
-    h->context_initialized = 0;
 }
 
 static int get_last_needed_nal(H264Context *h)
