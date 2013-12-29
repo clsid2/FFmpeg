@@ -517,9 +517,6 @@ static void h264_decode_flush(AVCodecContext *avctx)
 
     h->mb_y = 0;
 
-    ff_h264_free_tables(h);
-    h->context_initialized = 0;
-
     if (FF_HW_HAS_CB(avctx, flush))
         FF_HW_SIMPLE_CALL(avctx, flush);
 }
