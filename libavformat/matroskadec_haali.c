@@ -1123,6 +1123,8 @@ static int mkv_read_header(AVFormatContext *s)
       av_dict_set(&st->metadata, "language", info->Language, 0);
     av_dict_set(&st->metadata, "title", info->Name, 0);
 
+    av_dict_set(&st->metadata, "mkv-codec-id", info->CodecID, 0);
+
     if (info->Default)
       st->disposition |= AV_DISPOSITION_DEFAULT;
     if (info->Forced)
