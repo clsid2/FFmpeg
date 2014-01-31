@@ -4529,13 +4529,13 @@ AVProgram *av_new_program(AVFormatContext *ac, int id)
             return NULL;
         dynarray_add(&ac->programs, &ac->nb_programs, program);
         program->discard = AVDISCARD_NONE;
-    }
-    program->id = id;
-    program->pts_wrap_reference = AV_NOPTS_VALUE;
-    program->pts_wrap_behavior = AV_PTS_WRAP_IGNORE;
+        program->id = id;
+        program->pts_wrap_reference = AV_NOPTS_VALUE;
+        program->pts_wrap_behavior = AV_PTS_WRAP_IGNORE;
 
-    program->start_time =
-    program->end_time   = AV_NOPTS_VALUE;
+        program->start_time =
+        program->end_time   = AV_NOPTS_VALUE;
+    }
 
     return program;
 }
