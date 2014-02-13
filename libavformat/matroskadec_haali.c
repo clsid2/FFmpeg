@@ -1093,9 +1093,20 @@ static int mkv_read_header(AVFormatContext *s)
       if (ret < 0)
         return ret;
       codec_id = st->codec->codec_id;
+    } else if (!strcmp(info->CodecID, "A_QUICKTIME") && (info->CodecPrivateSize >= 86) && (info->CodecPrivate != NULL)) {
+      fourcc = AV_RL32((uint8_t *)info->CodecPrivate + 4);
+      codec_id = ff_codec_get_id(ff_codec_movaudio_tags, fourcc);
+      if (ff_codec_get_id(ff_codec_movaudio_tags, AV_RL32((uint8_t *)info->CodecPrivate))) {
+        fourcc = AV_RL32((uint8_t *)info->CodecPrivate);
+        codec_id = ff_codec_get_id(ff_codec_movaudio_tags, fourcc);
+      }
     } else if (!strcmp(info->CodecID, "V_QUICKTIME") && (info->CodecPrivateSize >= 86) && (info->CodecPrivate != NULL)) {
-      fourcc = AV_RL32(info->CodecPrivate);
+      fourcc = AV_RL32((uint8_t *)info->CodecPrivate + 4);
       codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
+      if (ff_codec_get_id(ff_codec_movvideo_tags, AV_RL32((uint8_t *)info->CodecPrivate))) {
+        fourcc = AV_RL32((uint8_t *)info->CodecPrivate);
+        codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
+      }
     } else if (codec_id == AV_CODEC_ID_PCM_S16BE) {
       switch (info->AV.Audio.BitDepth) {
       case  8:  codec_id = AV_CODEC_ID_PCM_U8;     break;
