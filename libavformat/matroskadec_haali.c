@@ -1107,6 +1107,8 @@ static int mkv_read_header(AVFormatContext *s)
         fourcc = AV_RL32((uint8_t *)info->CodecPrivate);
         codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
       }
+    } else if (!strcmp(info->CodecID, "V_PRORES") && (info->CodecPrivateSize == 4) && (info->CodecPrivate != NULL)) {
+      fourcc = AV_RL32((uint8_t *)info->CodecPrivate);
     } else if (codec_id == AV_CODEC_ID_PCM_S16BE) {
       switch (info->AV.Audio.BitDepth) {
       case  8:  codec_id = AV_CODEC_ID_PCM_U8;     break;
@@ -1554,6 +1556,15 @@ again:
     memset(dvbdata+dvbsize, 0, FF_INPUT_BUFFER_PADDING_SIZE);
     av_buffer_unref(&pkt->buf);
     av_packet_from_data(pkt, dvbdata, dvbsize);
+  } else if (!strcmp(track->info->CodecID, "V_PRORES")) {
+    int size = pkt->size + 8;
+    uint8_t *buf = av_malloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
+    AV_WB32(buf, pkt->size);
+    AV_WB32(buf + 4, MKBETAG('i', 'c', 'p', 'f'));
+    memcpy(buf + 8, pkt->data, pkt->size);
+    memset(buf+size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+    av_buffer_unref(&pkt->buf);
+    av_packet_from_data(pkt, buf, size);
   }
 
   if (track->refresh_extradata) {
