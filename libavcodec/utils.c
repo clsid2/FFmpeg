@@ -79,7 +79,16 @@ static int default_lockmgr_cb(void **arg, enum AVLockOp op)
             pthread_mutex_t *tmp = av_malloc(sizeof(pthread_mutex_t));
             if (!tmp)
                 return AVERROR(ENOMEM);
-            if ((err = pthread_mutex_init(tmp, NULL))) {
+#if HAVE_PTHREADS
+            pthread_mutexattr_t attr;
+            pthread_mutexattr_init(&attr);
+            pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+            err = pthread_mutex_init(tmp, &attr);
+            pthread_mutexattr_destroy(&attr);
+#else
+            err = pthread_mutex_init(tmp, NULL);
+#endif
+            if (err) {
                 av_free(tmp);
                 return AVERROR(err);
             }
