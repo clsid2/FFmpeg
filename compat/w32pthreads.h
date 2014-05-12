@@ -150,10 +150,19 @@ static inline int pthread_cond_broadcast(pthread_cond_t *cond)
     return 0;
 }
 
+static inline int pthread_cond_timedwait_w32(pthread_cond_t *cond, pthread_mutex_t *mutex, DWORD timeout)
+{
+    int ret;
+
+    ret = SleepConditionVariableSRW(cond, mutex, timeout, 0);
+    if (!ret && GetLastError() == ERROR_TIMEOUT)
+        errno = ETIMEDOUT;
+    return (ret ? 0 : -1);
+}
+
 static inline int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
-    SleepConditionVariableSRW(cond, mutex, INFINITE, 0);
-    return 0;
+    return pthread_cond_timedwait_w32(cond, mutex, INFINITE);
 }
 
 static inline int pthread_cond_signal(pthread_cond_t *cond)
