@@ -165,10 +165,19 @@ static inline int pthread_cond_broadcast(pthread_cond_t *cond)
     return 0;
 }
 
+static inline int pthread_cond_timedwait_w32(pthread_cond_t *cond, pthread_mutex_t *mutex, DWORD timeout)
+{
+    int ret;
+
+    ret = SleepConditionVariableCS(cond, mutex, timeout);
+    if (!ret && GetLastError() == ERROR_TIMEOUT)
+        errno = ETIMEDOUT;
+    return (ret ? 0 : -1);
+}
+
 static inline int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
-    SleepConditionVariableCS(cond, mutex, INFINITE);
-    return 0;
+    return pthread_cond_timedwait_w32(cond, mutex, INFINITE);
 }
 
 static inline int pthread_cond_signal(pthread_cond_t *cond)
@@ -335,13 +344,16 @@ static av_unused int pthread_cond_broadcast(pthread_cond_t *cond)
     return 0;
 }
 
-static av_unused int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
+static av_unused int pthread_cond_timedwait_w32(pthread_cond_t *cond, pthread_mutex_t *mutex, DWORD timeout)
 {
+    DWORD dwRet;
     win32_cond_t *win32_cond = (win32_cond_t*)cond->Ptr;
-    int last_waiter;
+    int last_waiter, ret;
     if (cond_wait) {
-        cond_wait(cond, mutex, INFINITE);
-        return 0;
+        ret = cond_wait(cond, mutex, timeout);
+        if (!ret && GetLastError() == ERROR_TIMEOUT)
+            errno = ETIMEDOUT;
+        return (ret ? 0 : -1);
     }
 
     /* non native condition variables */
@@ -353,7 +365,9 @@ static av_unused int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mu
 
     // unlock the external mutex
     pthread_mutex_unlock(mutex);
-    WaitForSingleObject(win32_cond->semaphore, INFINITE);
+    dwRet = WaitForSingleObject(win32_cond->semaphore, timeout);
+    if (dwRet == WAIT_TIMEOUT)
+        errno = ETIMEDOUT;
 
     pthread_mutex_lock(&win32_cond->mtx_waiter_count);
     win32_cond->waiter_count--;
@@ -364,7 +378,13 @@ static av_unused int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mu
         SetEvent(win32_cond->waiters_done);
 
     // lock the external mutex
-    return pthread_mutex_lock(mutex);
+    pthread_mutex_lock(mutex);
+    return (dwRet ? -1 : 0);
+}
+
+static av_unused int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
+{
+    return pthread_cond_timedwait_w32(cond, mutex, INFINITE);
 }
 
 static av_unused int pthread_cond_signal(pthread_cond_t *cond)
