@@ -62,6 +62,14 @@
 
 #if HAVE_PTHREAD_CANCEL
 #include <pthread.h>
+#elif HAVE_W32THREADS
+#include "compat/w32pthreads.h"
+
+#define pthread_setcancelstate(x,y)
+#define pthread_cancel(x)
+
+#undef HAVE_PTHREAD_CANCEL
+#define HAVE_PTHREAD_CANCEL 1
 #endif
 
 #ifndef HAVE_PTHREAD_CANCEL
@@ -1049,12 +1057,16 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
                 return AVERROR(EAGAIN);
             }
             else {
+            #if HAVE_W32THREADS
+                if (pthread_cond_timedwait_w32(&s->cond, &s->mutex, 100) < 0) {
+            #else
                 /* FIXME: using the monotonic clock would be better,
                    but it does not exist on all supported platforms. */
                 int64_t t = av_gettime() + 100000;
                 struct timespec tv = { .tv_sec  =  t / 1000000,
                                        .tv_nsec = (t % 1000000) * 1000 };
                 if (pthread_cond_timedwait(&s->cond, &s->mutex, &tv) < 0) {
+            #endif
                     pthread_mutex_unlock(&s->mutex);
                     return AVERROR(errno == ETIMEDOUT ? EAGAIN : errno);
                 }
@@ -1140,6 +1152,7 @@ static int udp_close(URLContext *h)
 
     if (s->is_multicast && (h->flags & AVIO_FLAG_READ))
         udp_leave_multicast_group(s->udp_fd, (struct sockaddr *)&s->dest_addr,(struct sockaddr *)&s->local_addr_storage);
+    closesocket(s->udp_fd);
 #if HAVE_PTHREAD_CANCEL
     if (s->thread_started) {
         int ret;
@@ -1153,7 +1166,6 @@ static int udp_close(URLContext *h)
         pthread_cond_destroy(&s->cond);
     }
 #endif
-    closesocket(s->udp_fd);
     av_fifo_freep(&s->fifo);
     return 0;
 }
