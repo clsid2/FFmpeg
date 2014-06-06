@@ -545,7 +545,7 @@ static void mkv_process_chapter(AVFormatContext *s, Chapter *chapter, int level,
 {
   unsigned i;
   if (chapter->UID && chapter->Enabled && !chapter->Hidden) {
-    AVChapter *avchap = avpriv_new_chapter(s, s->nb_chapters, (AVRational){1, 1000000000}, chapter->Start - offset, chapter->End - offset, chapter->Display ? chapter->Display->String : NULL);
+    AVChapter *avchap = avpriv_new_chapter(s, s->nb_chapters, (AVRational){1, 1000000000}, chapter->Start - offset, (chapter->End >= chapter->Start) ? chapter->End - offset : AV_NOPTS_VALUE, chapter->Display ? chapter->Display->String : NULL);
 
     if (level > 0 && chapter->Display && chapter->Display->String) {
       char *title = (char *)av_mallocz(level + strlen(chapter->Display->String) + 2);
