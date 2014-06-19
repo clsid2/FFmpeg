@@ -1039,6 +1039,7 @@ static int mkv_read_header(AVFormatContext *s)
     AVStream *st;
     uint32_t fourcc = 0;
     AVIOContext b;
+    int bit_depth = -1;
 
     track->info = info;
 
@@ -1086,7 +1087,8 @@ static int mkv_read_header(AVFormatContext *s)
 
     if (!strcmp(info->CodecID, "V_MS/VFW/FOURCC") && info->CodecPrivateSize >= 40 && info->CodecPrivate != NULL) {
       track->ms_compat = 1;
-      fourcc = AV_RL32((uint8_t *)info->CodecPrivate + 16);
+      bit_depth = AV_RL16((uint8_t *)info->CodecPrivate + 14);
+      fourcc    = AV_RL32((uint8_t *)info->CodecPrivate + 16);
       codec_id = ff_codec_get_id(ff_codec_bmp_tags, fourcc);
     } else if (!strcmp(info->CodecID, "A_MS/ACM") && info->CodecPrivateSize >= 14 && info->CodecPrivate != NULL) {
       ffio_init_context(&b, (uint8_t *)info->CodecPrivate, info->CodecPrivateSize, 0, NULL, NULL, NULL, NULL);
@@ -1147,6 +1149,8 @@ static int mkv_read_header(AVFormatContext *s)
     if (info->Type == TT_VIDEO) {
       st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
       st->codec->codec_tag  = fourcc;
+      if (bit_depth >= 0)
+        st->codec->bits_per_coded_sample = bit_depth;
       st->codec->width  = info->AV.Video.PixelWidth;
       st->codec->height = info->AV.Video.PixelHeight;
       if (info->AV.Video.DisplayWidth && info->AV.Video.DisplayHeight) {
