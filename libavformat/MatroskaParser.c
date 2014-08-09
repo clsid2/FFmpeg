@@ -67,7 +67,7 @@
 #define        MAX_TRACKS              64
 #define        MAX_READAHEAD              (256*1024)
 
-#define        MAXCLUSTER              (64*1048576)
+#define        MAXCLUSTER              (256*1048576)
 #define        MAXFRAME              (4*1048576)
 
 #if defined(_WIN32) && defined(_MSC_VER)
@@ -2521,8 +2521,6 @@ static int  readMoreBlocks(MatroskaFile *mf) {
       ENDFOR(mf);
 out:;
     } else {
-      if (toplen > MAXFRAME)
-        errorjmp(mf,"Element in a cluster is too large around %llu, %X [%u]",filepos(mf),cid,(unsigned)toplen);
       if (cid == 0xa0) // BlockGroup
         parseBlockGroup(mf,toplen,mf->tcCluster, 0);
       else if (cid == 0xa3) // BlockEx
