@@ -1488,8 +1488,12 @@ again:
         goto again;
     }
   }
-  if (ret < 0)
+  if (ret < 0) {
+    const char * mkv_error = mkv_GetLastError(ctx->matroska);
+    if (mkv_error)
+      av_log(s, AV_LOG_ERROR, "mkv error: %s\n", mkv_GetLastError(ctx->matroska));
     return AVERROR_EOF;
+  }
 
   track = &ctx->tracks[track_num];
   if (track_num >= ctx->num_tracks || !track->stream || track->stream->discard == AVDISCARD_ALL) {
