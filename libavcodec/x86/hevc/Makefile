@@ -11,3 +11,5 @@ X86ASM-OBJS-$(CONFIG_HEVC_DECODER)      += x86/hevc/dsp_init.o      \
                                            x86/hevc/sao_10bit.o     \
                                            x86/h26x/h2656dsp.o      \
                                            x86/h26x/h2656_inter.o
+
+OBJS-$(CONFIG_HEVC_DECODER)             += x86/hevc/idct_intrinsic.c
