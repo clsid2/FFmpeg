@@ -165,7 +165,8 @@ X86ASM-OBJS-$(CONFIG_HEVC_DECODER)     += x86/hevc_add_res.o            \
                                           x86/hevc_idct.o               \
                                           x86/hevc_mc.o                 \
                                           x86/hevc_sao.o                \
-                                          x86/hevc_sao_10bit.o
+                                          x86/hevc_sao_10bit.o          \
+                                          x86/hevc_idct_intrinsic.o
 X86ASM-OBJS-$(CONFIG_JPEG2000_DECODER) += x86/jpeg2000dsp.o
 X86ASM-OBJS-$(CONFIG_MLP_DECODER)      += x86/mlpdsp.o
 X86ASM-OBJS-$(CONFIG_MPEG4_DECODER)    += x86/xvididct.o
