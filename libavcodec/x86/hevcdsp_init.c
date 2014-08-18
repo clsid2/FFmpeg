@@ -1170,3 +1170,35 @@ void ff_hevc_dsp_init_x86(HEVCDSPContext *c, const int bit_depth)
         }
     }
 }
+
+#include "libavcodec/hevcpred.h"
+#include "libavcodec/x86/hevcpred.h"
+
+#undef FUNC
+#define FUNC(a, depth) a ## _ ## depth ## _sse
+
+#define HEVC_PRED(depth)                      \
+    hpc->pred_planar[0]  = FUNC(pred_planar_0, depth);  \
+    hpc->pred_planar[1]  = FUNC(pred_planar_1, depth);  \
+    hpc->pred_planar[2]  = FUNC(pred_planar_2, depth);  \
+    hpc->pred_planar[3]  = FUNC(pred_planar_3, depth);  \
+    hpc->pred_angular[0] = FUNC(pred_angular_0, depth); \
+    hpc->pred_angular[1] = FUNC(pred_angular_1, depth); \
+    hpc->pred_angular[2] = FUNC(pred_angular_2, depth); \
+    hpc->pred_angular[3] = FUNC(pred_angular_3, depth)
+
+void ff_hevc_pred_init_x86(HEVCPredContext *hpc, int bit_depth)
+{
+    int mm_flags = av_get_cpu_flags();
+
+    if (bit_depth == 8) {
+        if (HAVE_SSE42 && EXTERNAL_SSE42(mm_flags)) {
+            HEVC_PRED(8);
+        }
+    }
+    if (bit_depth == 10) {
+        if (HAVE_SSE42 && EXTERNAL_SSE42(mm_flags)) {
+            HEVC_PRED(10);
+        }
+    }
+}
