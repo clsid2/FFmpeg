@@ -577,7 +577,7 @@ void ff_hevc_transform_4x4_ ## D ## _sse2 (int16_t *_coeffs, int col_limit) {  \
 }
 #define TRANSFORM_8x8(D)                                                       \
 void ff_hevc_transform_8x8_ ## D ## _sse2 (int16_t *coeffs, int col_limit) {    \
-    int16_t tmp[8*8];                                                          \
+    DECLARE_ALIGNED(16, int16_t, tmp[8*8]);                                    \
     int16_t *src    = coeffs;                                                  \
     int16_t *p_dst1 = tmp;                                                     \
     int16_t *p_dst;                                                            \
@@ -640,8 +640,8 @@ TRANSFORM_8x8(12)
 #define TR_32(dst, dst_stride, in, sstep)                                      \
     {                                                                          \
         int i;                                                                 \
-        int e32[16*16];                                                        \
-        int o32[16*16];                                                        \
+        DECLARE_ALIGNED(16, int, e32[16*16]);                                  \
+        DECLARE_ALIGNED(16, int, o32[16*16]);                                  \
         LOAD16x16_O(e, in, sstep);                                             \
         for (i = 0; i < 16; i++) {                                             \
             src0 = _mm_setzero_si128();                                        \
@@ -674,8 +674,8 @@ void ff_hevc_transform_ ## H ## x ## H ## _ ## D ## _sse2 (                \
     int i, j, k, add;                                                          \
     int      shift = 7;                                                        \
     int16_t *src   = coeffs;                                                   \
-    int16_t  tmp[H*H];                                                         \
-    int16_t  tmp_2[H*H];                                                       \
+    DECLARE_ALIGNED(16, int16_t, tmp[H*H]);                                    \
+    DECLARE_ALIGNED(16, int16_t, tmp_2[H*H]);                                  \
     int16_t *p_dst, *p_tra = tmp_2;                                            \
     __m128i src0, src1, src2, src3;                                            \
     __m128i tmp0, tmp1, tmp2, tmp3, tmp4;                                      \
