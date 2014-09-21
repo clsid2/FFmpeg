@@ -30,6 +30,10 @@
 // potentially newer version.
 #include "dxva2_internal.h"
 
+#if !HAVE_DXVA_PICPARAMS_HEVC
+#include "compat/windows/dxva_hevc.h"
+#endif
+
 #define MAX_SLICES 256
 
 struct hevc_dxva2_picture_context {
