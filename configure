@@ -2254,6 +2254,7 @@ TOOLCHAIN_FEATURES="
 "
 
 TYPES_LIST="
+    DXVA_PicParams_HEVC
     kCMVideoCodecType_HEVC
     socklen_t
     struct_addrinfo
@@ -2880,11 +2881,11 @@ h264_vdpau_hwaccel_deps="vdpau"
 h264_vdpau_hwaccel_select="h264_decoder"
 h264_videotoolbox_hwaccel_deps="videotoolbox"
 h264_videotoolbox_hwaccel_select="h264_decoder"
-hevc_d3d11va_hwaccel_deps="d3d11va DXVA_PicParams_HEVC"
+hevc_d3d11va_hwaccel_deps="d3d11va"
 hevc_d3d11va_hwaccel_select="hevc_decoder"
-hevc_d3d11va2_hwaccel_deps="d3d11va DXVA_PicParams_HEVC"
+hevc_d3d11va2_hwaccel_deps="d3d11va"
 hevc_d3d11va2_hwaccel_select="hevc_decoder"
-hevc_dxva2_hwaccel_deps="dxva2 DXVA_PicParams_HEVC"
+hevc_dxva2_hwaccel_deps="dxva2"
 hevc_dxva2_hwaccel_select="hevc_decoder"
 hevc_nvdec_hwaccel_deps="nvdec"
 hevc_nvdec_hwaccel_select="hevc_decoder"
