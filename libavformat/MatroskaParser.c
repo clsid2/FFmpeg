@@ -2328,9 +2328,9 @@ found:
       have_duration = 1;
       break;
     case 0x75a1: // BlockAdditions
-      if (nframes > 0) // have some frames
+      /*if (nframes > 0) // have some frames
         parseBlockAdditions(mf, len, timecode, tracknum);
-      else
+      else*/
         skipbytes(mf, len);
       break;
     case 0x75a2: // DiscardPadding
