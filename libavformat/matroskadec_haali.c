@@ -1197,7 +1197,7 @@ static int mkv_read_header(AVFormatContext *s)
       }
     } else if (info->Type == TT_SUB) {
       st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
-      if (st->codec->codec_id == AV_CODEC_ID_SSA) {
+      if (st->codec->codec_id == AV_CODEC_ID_ASS) {
         /* HACK: Try to get the privdata of the main segments SSA track, otherwise DirectShow renderers fail */
         unsigned num = mkv_GetNumTracks(ctx->segments[0]->matroska);
         if (num > i) {
