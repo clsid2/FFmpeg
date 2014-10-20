@@ -1291,7 +1291,7 @@ static void mkv_switch_segment(AVFormatContext *s, MatroskaFile *segment, int fo
 
 #define FRAME_EOF 0x00400000
 
-static int mkv_packet_timeline_update(AVFormatContext *s, ulonglong *start_time, ulonglong *end_time, unsigned flags)
+static int mkv_packet_timeline_update(AVFormatContext *s, longlong *start_time, longlong *end_time, unsigned flags)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
   int next_timeline = 0;
@@ -1301,7 +1301,7 @@ static int mkv_packet_timeline_update(AVFormatContext *s, ulonglong *start_time,
   if (flags & FRAME_EOF) {
     av_log(s, AV_LOG_INFO, "Clip EOF at timeline %d\n", ctx->timeline_position);
     next_timeline = 1;
-  } else if (!(flags & FRAME_UNKNOWN_START) && *start_time >= ctx->timeline[ctx->timeline_position].chapter->End) {
+  } else if (!(flags & FRAME_UNKNOWN_START) && *start_time > 0 && *start_time >= ctx->timeline[ctx->timeline_position].chapter->End) {
     av_log(s, AV_LOG_INFO, "Clip reached chapter boundary at %I64d at timeline %d\n", *start_time, ctx->timeline_position);
     next_timeline = 1;
   }
