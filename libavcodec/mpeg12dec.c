@@ -67,6 +67,7 @@ typedef struct Mpeg1Context {
     AVRational save_aspect;
     int save_width, save_height, save_progressive_seq;
     int rc_buffer_size;
+    enum AVCodecID save_codec_id;
     AVRational frame_rate_ext;  /* MPEG-2 specific framerate modificator */
     int sync;                   /* Did we reach a sync point like a GOP/SEQ/KEYFrame? */
     int closed_gop;
@@ -1261,6 +1262,7 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
         s1->save_height          != s->height               ||
         av_cmp_q(s1->save_aspect, s->avctx->sample_aspect_ratio) ||
         (s1->save_progressive_seq != s->progressive_sequence && FFALIGN(s->height, 16) != FFALIGN(s->height, 32)) ||
+        s1->save_codec_id        != s->codec_id             ||
         0) {
         if (s1->mpeg_enc_ctx_allocated) {
 #if FF_API_FLAG_TRUNCATED
@@ -1288,6 +1290,7 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
         s1->save_width           = s->width;
         s1->save_height          = s->height;
         s1->save_progressive_seq = s->progressive_sequence;
+        s1->save_codec_id        = s->codec_id;
 
         /* low_delay may be forced, in this case we will have B-frames
          * that behave like P-frames. */
@@ -2230,6 +2233,7 @@ static int vcr2_init_sequence(AVCodecContext *avctx)
     s1->save_width           = s->width;
     s1->save_height          = s->height;
     s1->save_progressive_seq = s->progressive_sequence;
+    s1->save_codec_id        = s->codec_id;
     return 0;
 }
 
