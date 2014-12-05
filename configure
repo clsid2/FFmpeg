@@ -2556,7 +2556,7 @@ nellymoser_decoder_select="mdct sinewin"
 nellymoser_encoder_select="audio_frame_queue mdct sinewin"
 nuv_decoder_select="idctdsp lzo"
 on2avc_decoder_select="mdct"
-opus_decoder_deps="swresample"
+opus_decoder_deps_any="swresample avresample"
 opus_decoder_select="mdct15"
 opus_encoder_select="audio_frame_queue mdct15"
 png_decoder_select="zlib"
@@ -6688,7 +6688,8 @@ enabled zoompan_filter      && prepend avfilter_deps "swscale"
 
 enabled lavfi_indev         && prepend avdevice_deps "avfilter"
 
-enabled opus_decoder    && prepend avcodec_deps "swresample"
+enabled opus_decoder    && enabled swresample && prepend avcodec_deps "swresample"
+enabled opus_decoder    && enabled avresample && prepend avcodec_deps "avresample"
 
 expand_deps(){
     lib_deps=${1}_deps
