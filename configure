@@ -2759,7 +2759,7 @@ nellymoser_decoder_select="mdct sinewin"
 nellymoser_encoder_select="audio_frame_queue mdct sinewin"
 nuv_decoder_select="idctdsp lzo"
 on2avc_decoder_select="mdct"
-opus_decoder_deps="swresample"
+opus_decoder_deps_any="swresample avresample"
 opus_decoder_select="mdct15"
 opus_encoder_select="audio_frame_queue mdct15"
 png_decoder_deps="zlib"
@@ -6992,7 +6992,8 @@ enabled lavfi_indev         && prepend avdevice_deps "avfilter"
 enabled_any sdl2_outdev opengl_outdev && enabled sdl2 &&
     add_cflags $(filter_out '-Dmain=SDL_main' $sdl2_cflags)
 
-enabled opus_decoder    && prepend avcodec_deps "swresample"
+enabled opus_decoder    && enabled swresample && prepend avcodec_deps "swresample"
+enabled opus_decoder    && enabled avresample && prepend avcodec_deps "avresample"
 
 # reorder the items at var $1 to align with the items order at var $2 .
 # die if an item at $1 is not at $2 .
