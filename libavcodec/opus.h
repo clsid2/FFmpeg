@@ -29,7 +29,14 @@
 #include "libavutil/float_dsp.h"
 #include "libavutil/frame.h"
 
+#if CONFIG_SWRESAMPLE
 #include "libswresample/swresample.h"
+#elif CONFIG_AVRESAMPLE
+#include "libavresample/avresample.h"
+#else
+#error "swresample or avresample are required for Opus"
+#endif
+
 
 #include "avcodec.h"
 #include "opus_rc.h"
@@ -122,7 +129,11 @@ typedef struct OpusStreamContext {
     float *out_dummy;
     int    out_dummy_allocated_size;
 
+#if CONFIG_SWRESAMPLE
     SwrContext *swr;
+#elif CONFIG_AVRESAMPLE
+    AVAudioResampleContext *avr;
+#endif
     AVAudioFifo *celt_delay;
     int silk_samplerate;
     /* number of samples we still want to get from the resampler */
