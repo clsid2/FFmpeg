@@ -289,7 +289,7 @@ typedef struct HEIFGrid {
 } HEIFGrid;
 
 typedef struct MOVContext {
-    const AVClass *class; ///< class for private options
+    const AVClass *avclass; ///< class for private options
     AVFormatContext *fc;
     int time_scale;
     int64_t duration;     ///< duration of the longest track
