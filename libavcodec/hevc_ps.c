@@ -577,8 +577,6 @@ static void decode_vui(GetBitContext *gb, AVCodecContext *avctx,
     ff_h2645_decode_common_vui_params(gb, &sps->vui.common, avctx);
 
     if (vui->common.video_signal_type_present_flag) {
-        if (vui->common.video_full_range_flag && sps->pix_fmt == AV_PIX_FMT_YUV420P)
-            sps->pix_fmt = AV_PIX_FMT_YUVJ420P;
         if (vui->common.colour_description_present_flag) {
             if (vui->common.matrix_coeffs == AVCOL_SPC_RGB) {
                 switch (sps->pix_fmt) {
