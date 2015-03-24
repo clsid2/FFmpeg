@@ -259,6 +259,20 @@ static int flic_read_packet(AVFormatContext *s,
     return avio_feof(pb) ? AVERROR_EOF : ret;
 }
 
+static int flic_read_seek(AVFormatContext *s, int stream_index,
+                          int64_t pts, int flags)
+{
+    FlicDemuxContext *flic = s->priv_data;
+    if (pts == 0) {
+      flic->frame_number = 0;
+      avio_seek(s->pb, s->streams[flic->video_stream_index]->codecpar->extradata_size, SEEK_SET);
+
+      return 0;
+    }
+
+    return -1;
+}
+
 AVInputFormat ff_flic_demuxer = {
     .name           = "flic",
     .long_name      = NULL_IF_CONFIG_SMALL("FLI/FLC/FLX animation"),
@@ -266,4 +280,5 @@ AVInputFormat ff_flic_demuxer = {
     .read_probe     = flic_probe,
     .read_header    = flic_read_header,
     .read_packet    = flic_read_packet,
+    .read_seek      = flic_read_seek,
 };
