@@ -269,6 +269,13 @@ static int flic_read_seek(AVFormatContext *s, int stream_index,
     int64_t pos, ts;
     int index;
 
+    if (pts == 0) {
+        flic->frame_number = 0;
+        avio_seek(s->pb, s->streams[flic->video_stream_index]->codecpar->extradata_size, SEEK_SET);
+
+        return 0;
+    }
+
     if (!sti->index_entries || stream_index != flic->video_stream_index)
         return -1;
 
