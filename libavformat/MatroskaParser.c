@@ -471,6 +471,32 @@ static struct QueueEntry  *QGet(struct Queue *q) {
   return qe;
 }
 
+// allocate and initialize an array of Queues, one for each track
+static struct Queue* QsStructAlloc(MatroskaFile *mf) {
+  struct Queue *q = mf->cache->memalloc(mf->cache, mf->nTracks * sizeof(struct Queue));
+  if (q == NULL)
+    errorjmp(mf, "Ouf of memory");
+  memset(q, 0, mf->nTracks * sizeof(struct Queue));
+
+  return q;
+}
+
+// dump the contents of src into the head of each dest queue such that the
+// old tail of src[i] points to the old head of dest[i], the new head of dest[i]
+// is the old head of src[i], and the src queues are now empty.
+static void QsDumpHead(struct Queue *destination, struct Queue *source, int n) {
+  for (int i = 0; i < n; ++i) {
+    struct Queue *dest = &destination[i];
+    struct Queue *src = &source[i];
+    if (!src->tail) // do nothing if src queue empty
+        continue;
+    src->tail->next = dest->head; // link up queues
+    dest->head = src->head; // set heads and tails properly
+    src->head = NULL;
+    src->tail = NULL;
+  }
+}
+
 static struct QueueEntry  *QAlloc(MatroskaFile *mf) {
   struct QueueEntry   *qe,**qep;
   if (mf->QFreeList == NULL) {
@@ -503,6 +529,15 @@ static inline void QFree(MatroskaFile *mf,struct QueueEntry *qe) {
   qe->Data = NULL;
   qe->next = mf->QFreeList;
   mf->QFreeList = qe;
+}
+
+// deallocatee an array of Queues, one for each track
+static void QsStructFree(MatroskaFile *mf, struct Queue *q) {
+  for (int i = 0; i < mf->nTracks; ++i) {
+    while (q[i].head)
+      QFree(mf, QGet(&q[i]));
+  }
+  mf->cache->memfree(mf->cache, q);
 }
 
 // fill the buffer at current position
@@ -1618,6 +1653,7 @@ static void parseCues(MatroskaFile *mf,ulonglong toplen) {
   cc.Block = 0;
   cc.Duration = 0;
   cc.RelativePosition = 0;
+  cc.Track = 0;
 
   memcpy(&jb,&mf->jb,sizeof(jb));
 
@@ -1635,6 +1671,14 @@ static void parseCues(MatroskaFile *mf,ulonglong toplen) {
           cc.Time = readUInt(mf,(unsigned)len);
           break;
         case 0xb7: // CueTrackPositions
+
+          // reset out everything but CueTime
+          cc.Position = 0;
+          cc.Block = 0;
+          cc.Duration = 0;
+          cc.RelativePosition = 0;
+          cc.Track = 0;
+
           FOREACH(mf,len)
             case 0xf7: // CueTrack
               v = readUInt(mf,(unsigned)len);
@@ -2910,6 +2954,135 @@ static void DeleteChapter(MatroskaFile *mf,struct Chapter *ch) {
   mf->cache->memfree(mf->cache,ch->Children);
 }
 
+// Precondition: we are currently right at the start of a Block
+// or SimpleBlock or BlockGroup element and the Queues are all empty.
+//
+// Parse the block at relative position cueRelativePosition within the
+// cluster at absolute offset clusterOffset and return a pointer to a QueueEntry
+// storing its data. (This only parses the block and not sibling
+// elements so the start timecode will equal the end timecode.)
+// If we are not right at the start of something resembling a block,
+// returns NULL. The caller is responsible for ensuring eventual disposal
+// of the QueueEntry via the QFree function. This function gurantees mf queues
+// are empty after completing.
+//
+// The returned QueueEntry may have garbage Start and End values
+static struct QueueEntry* seekAndReadLoneBlock(MatroskaFile *mf, ulonglong clusterOffset, ulonglong cueRelativePosition) {
+  jmp_buf jb;
+  int ebmlID;
+  ulonglong toplen;
+  int nTracks = mf->nTracks;
+  struct QueueEntry *ret = NULL;
+  ulonglong clusterRelZero;
+
+  memcpy(&jb, &mf->jb, sizeof(jb));
+  if (setjmp(mf->jb) != 0)
+    goto out;
+
+  seek(mf, clusterOffset + 4); // seek to right after the ebml id of the cluster
+  readSizeUnspec(mf); // move to right after the end of the encoding of the cluster size (relative position 0)
+  clusterRelZero = filepos(mf); // absolute offset corresponding to relative position 0 within the cluster
+  seek(mf, clusterRelZero + cueRelativePosition); // seek to start of BlockGroup/Block/SimpleBlock
+
+  // the spec is unclear on whether CueRelativePositoin should be the position of a Block's BlockGroup
+  // or the Block itself, so we handle both possibilities.
+  ebmlID = readID(mf);
+  if (ebmlID == 0xa0 || ebmlID == 0xa1 || ebmlID == 0xa3) { // BlockGroup or Block or SimpleBlock
+    toplen = readSize(mf);
+
+    if (ebmlID == 0xa0) { // BlockGroup
+      parseBlockGroup(mf, toplen, 0, 0); // parses block into a queue in mf
+    } else {
+      parseBlockGroup(mf, toplen, 0, 1); // parses block into a queue in mf
+    }
+
+    // find the block and return it
+    for (int i = 0; i < nTracks; ++i) {
+      ret = QGet(&mf->Queues[i]);
+      if (ret)
+        break;
+    }
+  }
+
+out:
+  // if for some reason a file tried to use lacing
+  // for subtitle blocks, we might have a nonempty queue.
+  EmptyQueues(mf);
+  memcpy(&mf->jb, &jb, sizeof(jb));
+  return ret;
+}
+
+// get index in mf->Tracks corresponding to trackNum
+// returns -1 if track number is invalid
+static int TrackNumToIndex(MatroskaFile *mf, unsigned char trackNum) {
+  int nTracks = mf->nTracks;
+  for (int i = 0; i < nTracks; ++i)
+      if (mf->Tracks[i]->Number == trackNum)
+          return i;
+
+  return -1;
+}
+
+// returns the index of the next cue at index >= startIdx that corresponds
+// to a pre-existing subtitle at timecode timecode. If no such cue exists,
+// returns -1. All cues corresponding to indices returned by this function are
+// guaranteed to have valid track numbers.
+//
+static int NextPESubtitleIdx(MatroskaFile *mf, ulonglong timecode, int startIdx) {
+  int nCues = mf->nCues;
+  Cue cue;
+
+  for (int i = startIdx; i < nCues; ++i) {
+      cue = mf->Cues[i];
+
+      if (cue.Time > timecode) {
+          break;
+      } else {
+          int trackIndex = TrackNumToIndex(mf, cue.Track);
+
+          if (trackIndex >= 0 && mf->Tracks[trackIndex]->Type == TT_SUB && !(mf->trackMask & (ULL(1) << trackIndex))
+              && cue.Duration && cue.RelativePosition && cue.Time + cue.Duration >= timecode) {
+
+              return i;
+          }
+      }
+  }
+
+  return -1;
+}
+
+static void GetSubtitlePreroll(MatroskaFile *mf, ulonglong timecode, struct Queue *subPreQueues) {
+  struct QueueEntry *qe;
+  Cue cue;
+  ulonglong prevPosition = 0, prevRelativePosition = 0;
+
+  EmptyQueues(mf);
+
+  // for each cue that overlaps with timecode in a subtitle track, add it to the corresponding
+  // queue in subPreQueues
+  for (int i = NextPESubtitleIdx(mf, timecode, 0); i != -1; i = NextPESubtitleIdx(mf, timecode, i+1)) {
+    cue = mf->Cues[i];
+
+    // skip to next cue if we are going to read same block as previous
+    if (cue.Position == prevPosition && cue.RelativePosition == prevRelativePosition)
+      continue;
+
+    // read the block contents into a QueueEntry and insert it
+    qe = seekAndReadLoneBlock(mf, mf->pSegment + cue.Position, cue.RelativePosition);
+
+    if (qe) {
+      int trackIndex = TrackNumToIndex(mf, cue.Track);
+      qe->Start = mul3(mf->Tracks[trackIndex]->TimecodeScale, cue.Time);
+      qe->End = qe->Start + cue.Duration;
+      QPut(&subPreQueues[trackIndex], qe);
+    }
+
+    // save present Position and RelativePosition for future comparisons
+    prevPosition = cue.Position;
+    prevRelativePosition = cue.RelativePosition;
+  }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 // public interface
 MatroskaFile  *mkv_OpenEx(InputStream *io,
@@ -3121,6 +3294,7 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
   unsigned        n,z;
   ulonglong        mask,m_kftime[MAX_TRACKS];
   unsigned char        m_seendf[MAX_TRACKS];
+  struct Queue      *subPreQueues = NULL;
 
   if (mf->flags & MKVF_AVOID_SEEKS)
     return;
@@ -3145,12 +3319,16 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
   i = 0;
   j = mf->nCues - 1;
 
+  // get pre-existing subtitles that should be displayed at timecode
+  subPreQueues = QsStructAlloc(mf);
+  GetSubtitlePreroll(mf, timecode, subPreQueues);
+
   for (;;) {
     if (i>j) {
       j = j>=0 ? j : 0;
 
       if (setjmp(mf->jb)!=0)
-        return;
+        goto dealloc;
 
       mkv_SetTrackMask(mf,mf->trackMask);
 
@@ -3173,7 +3351,7 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
 
           for (;;) {
             if ((ret = fillQueues(mf,0)) < 0 || ret == RBRESYNC)
-              return;
+              goto dealloc;
 
             // drain queues until we get to the required timecode
             for (n=0;n<mf->nTracks;++n) {
@@ -3238,7 +3416,7 @@ again:;
 
       for (mask=mf->trackMask;;) {
         if ((ret = fillQueues(mf,mask)) < 0 || ret == RBRESYNC)
-          return;
+          goto dealloc;
 
         // drain queues until we get to the required timecode
         for (n=0;n<mf->nTracks;++n) {
@@ -3255,8 +3433,31 @@ again:;
             ++z;
           }
 
-        if (z==mf->nTracks)
-          return;
+        if (z==mf->nTracks) {
+          for (int i = 0; i<mf->nTracks; ++i) {
+            if (subPreQueues[i].head) { // if the subPreQueues are not empty
+              // remove any subtitles from queues that are duplicates of stuff in subPreQueues
+              if (mf->Tracks[i]->Type == TT_SUB)
+                while (mf->Queues[i].head && mf->Queues[i].head->Start <= timecode)
+                  QFree(mf, QGet(&mf->Queues[i]));
+
+              // from subPreQueues, filter out any subtitle blocks that we'll see later on in the file
+              // (prevents the occasional case of having a subtitle displayed twice)
+              ulonglong fp = filepos(mf);
+
+              struct QueueEntry *qe;
+              struct Queue tmpQ = { .head = NULL, .tail = NULL };
+              while (qe = subPreQueues[i].head)
+                  if (qe->Position < fp)
+                      QPut(&tmpQ, QGet(&subPreQueues[i]));
+                  else
+                      QFree(mf, QGet(&subPreQueues[i]));
+              subPreQueues[i] = tmpQ;
+            }
+          }
+          QsDumpHead(mf->Queues, subPreQueues, mf->nTracks); // add pre-existing subtitles to the queues
+          goto dealloc;
+        }
       }
     }
 
@@ -3267,6 +3468,10 @@ again:;
     else
       i = m+1;
   }
+
+dealloc:
+  if (subPreQueues)
+    QsStructFree(mf, subPreQueues);
 }
 
 void  mkv_SkipToKeyframe(MatroskaFile *mf) {
