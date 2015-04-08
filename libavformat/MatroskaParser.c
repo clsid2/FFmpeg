@@ -3289,6 +3289,26 @@ void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong timecode, unsigned flags, uns
   mkv_Seek(mf, timecode, flags);
 }
 
+static inline int CueSuitableForSeeking(MatroskaFile *mf, int nCue) {
+  if (nCue < 0 || nCue >= mf->nCues)
+    return 0;
+
+  int nTrack = -1;
+  unsigned char nBestTrackType = TT_SUB;
+  for (int n = 0; n < mf->nTracks; ++n) {
+    if (!(mf->trackMask & (ULL(1)<<n)) && mf->Tracks[n]->Type < nBestTrackType)
+      nBestTrackType = mf->Tracks[n]->Type;
+
+    if (mf->Tracks[n]->Number == mf->Cues[nCue].Track)
+      nTrack = n;
+  }
+
+  if (nTrack >= 0 && nTrack < mf->nTracks && mf->Tracks[nTrack]->Type > nBestTrackType)
+    return 0;
+
+  return 1;
+}
+
 void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
   int                i,j,m,ret;
   unsigned        n,z;
@@ -3339,6 +3359,12 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
 
         // pass 1
         for (;;) {
+          if (!CueSuitableForSeeking(mf, j))  {
+            // skip this Cue, re-start from previous
+            --j;
+            goto again;
+          }
+
           for (n=0;n<mf->nTracks;++n) {
             m_kftime[n] = MAXU64;
             m_seendf[n] = 0;
