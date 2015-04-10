@@ -70,6 +70,9 @@
 #define        MAXCLUSTER              (256*1048576)
 #define        MAXFRAME              (4*1048576)
 
+#define        MAXDURATIONREAD   (13000000LL)
+#define        MAXDURATIONRETRY  (6)
+
 #if defined(_WIN32) && defined(_MSC_VER)
 #define        LL(x)        x##i64
 #define        ULL(x)        x##ui64
@@ -2747,7 +2750,7 @@ static void fixupChapter(ulonglong adj, struct Chapter *ch) {
 
 static longlong        findLastTimecode(MatroskaFile *mf) {
   ulonglong   nd = 0;
-  unsigned    n,vtrack;
+  unsigned    n,vtrack,retry=0;
 
   if (mf->nTracks == 0)
     return -1;
@@ -2763,25 +2766,36 @@ ok:
 
   EmptyQueues(mf);
 
-  if (mf->nCues == 0) {
-    mf->readPosition = mf->pCluster + 13000000 > mf->pSegmentTop ? mf->pCluster : mf->pSegmentTop - 13000000;
-    mf->tcCluster = 0;
-  } else {
-    mf->readPosition = mf->Cues[mf->nCues - 1].Position + mf->pSegment;
-    mf->tcCluster = mf->Cues[mf->nCues - 1].Time / mf->Seg.TimecodeScale;
-  }
   mf->trackMask = ~(ULL(1) << vtrack);
 
-  do
-    while (mf->Queues[vtrack].head)
-    {
-      ulonglong   tc = mf->Queues[vtrack].head->flags & FRAME_UNKNOWN_END ?
-                          mf->Queues[vtrack].head->Start : mf->Queues[vtrack].head->End;
-      if (nd < tc)
-        nd = tc;
-      QFree(mf,QGet(&mf->Queues[vtrack]));
+  while (nd == 0 && retry < MAXDURATIONRETRY) {
+    if (mf->nCues == 0) {
+      mf->readPosition = mf->pCluster + (MAXDURATIONREAD << retry) > mf->pSegmentTop ? mf->pCluster : mf->pSegmentTop - (MAXDURATIONREAD << retry);
+      mf->tcCluster = 0;
+
+      if (retry > 0 && (mf->pCluster + (MAXDURATIONREAD << retry) > mf->pSegmentTop) && (mf->pCluster + (MAXDURATIONREAD << (retry - 1)) > mf->pSegmentTop))
+        break;
+    } else {
+      if (retry >= mf->nCues)
+        break;
+
+      mf->readPosition = mf->Cues[mf->nCues - (1 + retry)].Position + mf->pSegment;
+      mf->tcCluster = mf->Cues[mf->nCues - (1 + retry)].Time / mf->Seg.TimecodeScale;
     }
-  while (fillQueues(mf,0) != EOF);
+
+    do
+      while (mf->Queues[vtrack].head)
+      {
+        ulonglong   tc = mf->Queues[vtrack].head->flags & FRAME_UNKNOWN_END ?
+          mf->Queues[vtrack].head->Start : mf->Queues[vtrack].head->End;
+        if (nd < tc)
+          nd = tc;
+        QFree(mf, QGet(&mf->Queues[vtrack]));
+      }
+    while (fillQueues(mf, 0) != EOF);
+
+    retry++;
+  }
 
   mf->trackMask = 0;
 
