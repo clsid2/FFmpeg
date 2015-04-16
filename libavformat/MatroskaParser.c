@@ -1649,7 +1649,7 @@ static void parseCues(MatroskaFile *mf,ulonglong toplen) {
   jmp_buf     jb;
   ulonglong   v;
   struct Cue  cc;
-  unsigned    i,j,k;
+  unsigned    i,j,k,startCue;
 
   mf->seen.Cues = 1;
   mf->nCues = 0;
@@ -1669,6 +1669,7 @@ static void parseCues(MatroskaFile *mf,ulonglong toplen) {
 
   FOREACH(mf,toplen)
     case 0xbb: // CuePoint
+      startCue = mf->nCues;
       FOREACH(mf,len)
         case 0xb3: // CueTime
           cc.Time = readUInt(mf,(unsigned)len);
@@ -1721,13 +1722,21 @@ static void parseCues(MatroskaFile *mf,ulonglong toplen) {
               ENDFOR(mf);
               break;
           ENDFOR(mf);
+
+          if (mf->nCues == 0 && mf->pCluster - mf->pSegment != cc.Position) {
+            addCue(mf,mf->pCluster - mf->pSegment,mf->firstTimecode);
+            startCue = 1;
+          }
+
+          memcpy(AGET(mf,Cues),&cc,sizeof(cc));
           break;
       ENDFOR(mf);
 
-      if (mf->nCues == 0 && mf->pCluster - mf->pSegment != cc.Position)
-        addCue(mf,mf->pCluster - mf->pSegment,mf->firstTimecode);
+      // Update time after parsing all CueTrackPositions
+      // The time may not have been available before
+      for (i = startCue; i < mf->nCues; i++)
+          mf->Cues[i].Time = cc.Time;
 
-      memcpy(AGET(mf,Cues),&cc,sizeof(cc));
       break;
   ENDFOR(mf);
 
