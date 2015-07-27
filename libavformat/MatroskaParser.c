@@ -42,6 +42,9 @@
 
 #include <tchar.h>
 #elif defined(__MINGW32__)
+#ifdef alloca
+#undef alloca
+#endif
 #define alloca __builtin_alloca
 #endif
 
@@ -751,7 +754,7 @@ static inline ulonglong        readVLUInt(MatroskaFile *mf) {
 }
 
 static ulonglong        readSizeUnspec(MatroskaFile *mf) {
-  int            m;
+  int       m = 0;
   ulonglong v = readVLUIntImp(mf,&m);
 
   // see if it's unspecified
@@ -961,6 +964,7 @@ static void readLangCC(MatroskaFile *mf, ulonglong len, char lcc[4]) {
 #define        STRGETA(f,v,len)  STRGETF(f,v,len,myalloca)
 #define        STRGETM(f,v,len)  STRGETF(f,v,len,f->cache->memalloc)
 
+#if 0
 static int  IsWritingApp(MatroskaFile *mf,const char *str) {
   const char  *cp = mf->Seg.WritingApp;
   if (!cp)
@@ -970,6 +974,7 @@ static int  IsWritingApp(MatroskaFile *mf,const char *str) {
 
   return !*str;
 }
+#endif
 
 static void parseEBML(MatroskaFile *mf,ulonglong toplen) {
   ulonglong v;
@@ -2196,6 +2201,7 @@ static void parseSegment(MatroskaFile *mf,ulonglong toplen) {
   parsePointers(mf);
 }
 
+#if 0
 static void parseBlockAdditions(MatroskaFile *mf, ulonglong toplen, ulonglong timecode, unsigned track) {
   ulonglong        add_id = 1, add_pos, add_len;
   unsigned char        have_add;
@@ -2234,6 +2240,7 @@ static void parseBlockAdditions(MatroskaFile *mf, ulonglong toplen, ulonglong ti
       break;
   ENDFOR(mf);
 }
+#endif
 
 static void parseBlockGroup(MatroskaFile *mf,ulonglong toplen,ulonglong timecode, int blockex) {
   ulonglong        v;
@@ -2900,10 +2907,8 @@ segment:
 }
 
 static void parseFileSparse(MatroskaFile *mf) {
-  ulonglong len = filepos(mf), adjust;
-  unsigned  i;
+  ulonglong len = filepos(mf);
   int id = readID(mf);
-  int found_uid = 0;
 
   if (id==EOF)
     errorjmp(mf,"Unexpected EOF at start of file");
@@ -3313,12 +3318,13 @@ void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong timecode, unsigned flags, uns
 }
 
 static inline int CueSuitableForSeeking(MatroskaFile *mf, int nCue) {
+  int nTrack = -1, n;
+  unsigned char nBestTrackType = TT_SUB;
+
   if (nCue < 0 || nCue >= mf->nCues)
     return 0;
 
-  int nTrack = -1;
-  unsigned char nBestTrackType = TT_SUB;
-  for (int n = 0; n < mf->nTracks; ++n) {
+  for (n = 0; n < mf->nTracks; ++n) {
     if (!(mf->trackMask & (ULL(1)<<n)) && mf->Tracks[n]->Type < nBestTrackType)
       nBestTrackType = mf->Tracks[n]->Type;
 
@@ -3485,6 +3491,10 @@ again:;
         if (z==mf->nTracks) {
           for (int i = 0; i<mf->nTracks; ++i) {
             if (subPreQueues[i].head) { // if the subPreQueues are not empty
+              ulonglong fp = filepos(mf);
+              struct QueueEntry *qe;
+              struct Queue tmpQ = { .head = NULL, .tail = NULL };
+
               // remove any subtitles from queues that are duplicates of stuff in subPreQueues
               if (mf->Tracks[i]->Type == TT_SUB)
                 while (mf->Queues[i].head && mf->Queues[i].head->Start <= timecode)
@@ -3492,10 +3502,6 @@ again:;
 
               // from subPreQueues, filter out any subtitle blocks that we'll see later on in the file
               // (prevents the occasional case of having a subtitle displayed twice)
-              ulonglong fp = filepos(mf);
-
-              struct QueueEntry *qe;
-              struct Queue tmpQ = { .head = NULL, .tail = NULL };
               while (qe = subPreQueues[i].head)
                   if (qe->Position < fp)
                       QPut(&tmpQ, QGet(&subPreQueues[i]));
