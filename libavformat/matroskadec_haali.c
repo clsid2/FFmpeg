@@ -45,6 +45,12 @@
 
 #define IO_BUFFER_SIZE 32768
 
+#define FF_PRI_UID "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x"
+#define FF_ARG_UID(uid) (uint8_t)uid[0], (uint8_t)uid[1], (uint8_t)uid[2], (uint8_t)uid[3], \
+                        (uint8_t)uid[4], (uint8_t)uid[5], (uint8_t)uid[6], (uint8_t)uid[7], \
+                        (uint8_t)uid[8], (uint8_t)uid[9], (uint8_t)uid[10], (uint8_t)uid[11], \
+                        (uint8_t)uid[12], (uint8_t)uid[13], (uint8_t)uid[14], (uint8_t)uid[15]
+
 static const char *matroska_doctypes[] = { "matroska", "webm" };
 
 typedef struct AVIOStream {
@@ -317,7 +323,6 @@ static MatroskaSegment* mkv_open_segment(AVFormatContext *s, AVIOContext *pb, ul
 
 static void mkv_reopen_segment(AVFormatContext *s, MatroskaSegment *segment)
 {
-  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
   char ErrorMessage[256];
 
   /* reset packet size */
@@ -367,7 +372,7 @@ static int mkv_find_segment_avio(AVFormatContext *s, AVIOContext *pb, ulonglong 
 {
   MatroskaSegment *segment;
 
-  av_log(s, AV_LOG_INFO, "Scanning for Segment at %I64d\n", base);
+  av_log(s, AV_LOG_INFO, "Scanning for Segment at %"PRId64"\n", base);
 
   if (base == 0)
     segment = mkv_discover_segment(s, pb);
@@ -377,8 +382,7 @@ static int mkv_find_segment_avio(AVFormatContext *s, AVIOContext *pb, ulonglong 
   if (!segment)
     return 0;
 
-  av_log(s, AV_LOG_INFO, "Found Segment with UID: %08x%08x%08x%08x\n",
-    *(unsigned int*)&segment->UID[0], *(unsigned int*)&segment->UID[4], *(unsigned int*)&segment->UID[8], *(unsigned int*)&segment->UID[12]);
+  av_log(s, AV_LOG_INFO, "Found Segment with UID: "FF_PRI_UID"\n", FF_ARG_UID(segment->UID));
 
   if (base == 0) {
     segment->free_avio = 1;
@@ -410,19 +414,18 @@ done:
 
 static void mkv_find_segments(AVFormatContext *s)
 {
-  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
   char *filename, *filespec;
   const char *path, *file;
   int ret = 0;
   intptr_t handle;
   struct _wfinddata_t finddata;
+  wchar_t wfilespec[4096];
 
   filename = av_strdup(s->filename);
   file = av_basename(filename);
   path = av_dirname(filename);
   filespec = av_asprintf("%s/*.mk?", path);
 
-  wchar_t wfilespec[4096];
   if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filespec, -1, wfilespec, 4096)) {
     handle = _wfindfirst(wfilespec, &finddata);
     if (handle != -1) {
@@ -603,13 +606,12 @@ static void mkv_dump_chapters(Chapter *chapters, int count)
   for (i = 0; i < count; i++) {
     Chapter *chapter = &chapters[i];
     av_log(NULL, AV_LOG_INFO, "   -> Chapter %d", i);
-    av_log(NULL, AV_LOG_INFO, "    -> UID:        %I64u", chapter->UID);
-    av_log(NULL, AV_LOG_INFO, "    -> SegmentUID: %08x%08x%08x%08x",
-      *(unsigned int*)&chapter->SegmentUID[0], *(unsigned int*)&chapter->SegmentUID[4], *(unsigned int*)&chapter->SegmentUID[8], *(unsigned int*)&chapter->SegmentUID[12]);
+    av_log(NULL, AV_LOG_INFO, "    -> UID:        %"PRIu64, chapter->UID);
+    av_log(NULL, AV_LOG_INFO, "    -> SegmentUID: "FF_PRI_UID, FF_ARG_UID(chapter->SegmentUID));
     av_log(NULL, AV_LOG_INFO, "    -> Enabled:    %d", chapter->Enabled);
     av_log(NULL, AV_LOG_INFO, "    -> Hidden:     %d", chapter->Hidden);
-    av_log(NULL, AV_LOG_INFO, "    -> Start:      %I64u", chapter->Start);
-    av_log(NULL, AV_LOG_INFO, "    -> End:        %I64u", chapter->End);
+    av_log(NULL, AV_LOG_INFO, "    -> Start:      %"PRIu64, chapter->Start);
+    av_log(NULL, AV_LOG_INFO, "    -> End:        %"PRIu64, chapter->End);
     if (chapter->Display && chapter->Display->String)
       av_log(NULL, AV_LOG_INFO, "    -> Name:       %s", chapter->Display->String);
   }
@@ -622,7 +624,7 @@ static void mkv_dump_editions(Chapter *editions, int count)
   for (i = 0; i < count; i++) {
     Chapter *edition = &editions[i];
     av_log(NULL, AV_LOG_INFO, " -> Edition %d", i);
-    av_log(NULL, AV_LOG_INFO, "  -> UID:      %I64u", edition->UID);
+    av_log(NULL, AV_LOG_INFO, "  -> UID:      %"PRIu64, edition->UID);
     av_log(NULL, AV_LOG_INFO, "  -> Default:  %d", edition->Default);
     av_log(NULL, AV_LOG_INFO, "  -> Hidden:   %d", edition->Hidden);
     av_log(NULL, AV_LOG_INFO, "  -> Ordered:  %d", edition->Ordered);
@@ -768,14 +770,13 @@ static Chapter *mkv_chapter_add_child(Chapter *chapter)
   chapter->nChildrenSize = chapter->nChildren * sizeof(Chapter);
   chapter->Children = av_realloc(chapter->Children, chapter->nChildrenSize);
 
-  Chapter *newChapter = &chapter->Children[chapter->nChildren-1];
-  memset(newChapter, 0, sizeof(Chapter));
-  return newChapter;
+  memset(&chapter->Children[chapter->nChildren - 1], 0, sizeof(Chapter));
+  return &chapter->Children[chapter->nChildren - 1];
 }
 
 static void mkv_process_link(AVFormatContext *s, Chapter *edition, char uid[16], int prev, int next)
 {
-  Chapter *chapters = NULL;
+  Chapter *chapters = NULL, *chapter = NULL;
   unsigned int count = 0;
   MatroskaSegment *segment = mkv_get_segment(s, uid);
   if (!segment) return;
@@ -784,7 +785,7 @@ static void mkv_process_link(AVFormatContext *s, Chapter *edition, char uid[16],
     mkv_process_link(s, edition, segment->info->PrevUID, 1, 0);
   }
 
-  Chapter *chapter = mkv_chapter_add_child(edition);
+  chapter = mkv_chapter_add_child(edition);
   memcpy(chapter->SegmentUID, uid, 16);
   chapter->Enabled = 1;
   chapter->Hidden = 1;
@@ -1201,9 +1202,9 @@ static int mkv_read_header(AVFormatContext *s)
         /* HACK: Try to get the privdata of the main segments SSA track, otherwise DirectShow renderers fail */
         unsigned num = mkv_GetNumTracks(ctx->segments[0]->matroska);
         if (num > i) {
-          info = mkv_GetTrackInfo(ctx->segments[0]->matroska, i);
           uint8_t *main_extradata = NULL;
           int main_extradata_size = 0;
+          info = mkv_GetTrackInfo(ctx->segments[0]->matroska, i);
           ret = mkv_generate_extradata(s, info, codec_id, &main_extradata, &main_extradata_size);
           if (ret == 0 && main_extradata_size && main_extradata) {
             av_freep(&st->codec->extradata);
@@ -1302,7 +1303,7 @@ static int mkv_packet_timeline_update(AVFormatContext *s, longlong *start_time, 
     av_log(s, AV_LOG_INFO, "Clip EOF at timeline %d\n", ctx->timeline_position);
     next_timeline = 1;
   } else if (!(flags & FRAME_UNKNOWN_START) && *start_time > 0 && *start_time >= ctx->timeline[ctx->timeline_position].chapter->End) {
-    av_log(s, AV_LOG_INFO, "Clip reached chapter boundary at %I64d at timeline %d\n", *start_time, ctx->timeline_position);
+    av_log(s, AV_LOG_INFO, "Clip reached chapter boundary at %"PRId64" at timeline %d\n", *start_time, ctx->timeline_position);
     next_timeline = 1;
   }
   if (next_timeline) {
@@ -1313,7 +1314,7 @@ static int mkv_packet_timeline_update(AVFormatContext *s, longlong *start_time, 
       return AVERROR_EOF;
     }
     if (ctx->timeline[ctx->timeline_position].need_seek) {
-      av_log(s, AV_LOG_INFO, "Seeking to timeline %d (position %I64d)\n", ctx->timeline_position, ctx->timeline[ctx->timeline_position].chapter->Start);
+      av_log(s, AV_LOG_INFO, "Seeking to timeline %d (position %"PRId64")\n", ctx->timeline_position, ctx->timeline[ctx->timeline_position].chapter->Start);
       mkv_switch_segment(s, ctx->timeline[ctx->timeline_position].segment->matroska, 0);
       mkv_Seek_CueAware(ctx->matroska, ctx->timeline[ctx->timeline_position].chapter->Start, MKVF_SEEK_TO_PREV_KEYFRAME, 1);
       // Need to discard the current frame, and re-read after the seek
