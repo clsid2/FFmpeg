@@ -1607,10 +1607,7 @@ again:
     else
       pkt->pts = start_time - track->info->CodecDelay;
 
-    if (track->info->Type == TT_SUB)
-      pkt->convergence_duration = end_time - start_time;
-    else
-      pkt->duration = (int)(end_time - start_time);
+    pkt->duration = end_time - start_time;
   }
 
   pkt->flags = (flags & FRAME_KF) ? AV_PKT_FLAG_KEY : 0;
