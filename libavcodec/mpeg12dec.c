@@ -1291,7 +1291,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
             case 1: avctx->chroma_sample_location = AVCHROMA_LOC_LEFT; break;
             case 2:
             case 3: avctx->chroma_sample_location = AVCHROMA_LOC_TOPLEFT; break;
-            default: av_assert0(0);
             }
         } // MPEG-2
 
