@@ -952,7 +952,6 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
             case CHROMA_420: avctx->chroma_sample_location = AVCHROMA_LOC_LEFT; break;
             case CHROMA_422:
             case CHROMA_444: avctx->chroma_sample_location = AVCHROMA_LOC_TOPLEFT; break;
-            default: av_assert0(0);
             }
         } // MPEG-2
 
