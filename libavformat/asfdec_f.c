@@ -1610,7 +1610,7 @@ static int asf_build_simple_index(AVFormatContext *s, int stream_index)
             int pktnum        = avio_rl32(s->pb);
             int pktct         = avio_rl16(s->pb);
             int64_t pos       = s->internal->data_offset + s->packet_size * (int64_t)pktnum;
-            int64_t index_pts = FFMAX(av_rescale(itime, i, 10000) - asf->hdr.preroll, 0);
+            int64_t index_pts = FFMAX(av_rescale(itime, i, 10000), 0);
 
             if (avio_feof(s->pb)) {
                 ret = AVERROR_INVALIDDATA;
