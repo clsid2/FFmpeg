@@ -1188,7 +1188,9 @@ static int mkv_read_header(AVFormatContext *s)
       st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
       st->codec->sample_rate = (unsigned int)info->AV.Audio.OutputSamplingFreq;
       st->codec->channels = info->AV.Audio.Channels;
-      if (st->codec->codec_id != AV_CODEC_ID_AAC && st->codec->codec_id != AV_CODEC_ID_MLP && st->codec->codec_id != AV_CODEC_ID_TRUEHD)
+      if (st->codec->codec_id == AV_CODEC_ID_MP3)
+        st->need_parsing = AVSTREAM_PARSE_FULL;
+      else if (st->codec->codec_id != AV_CODEC_ID_AAC && st->codec->codec_id != AV_CODEC_ID_MLP && st->codec->codec_id != AV_CODEC_ID_TRUEHD)
         st->need_parsing = AVSTREAM_PARSE_HEADERS;
       if (track->info->CodecDelay > 0) {
         st->codec->delay = av_rescale_q(track->info->CodecDelay, (AVRational){1, 1000000000}, (AVRational){1, st->codec->sample_rate});
