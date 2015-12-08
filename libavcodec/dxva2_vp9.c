@@ -26,6 +26,10 @@
 #include "dxva2_internal.h"
 #include "vp9shared.h"
 
+#if !HAVE_DXVA_PICPARAMS_VP9
+#include "compat/windows/dxva_vpx.h"
+#endif
+
 struct vp9_dxva2_picture_context {
     DXVA_PicParams_VP9    pp;
     DXVA_Slice_VPx_Short  slice;
