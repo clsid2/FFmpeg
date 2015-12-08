@@ -2082,6 +2082,7 @@ TOOLCHAIN_FEATURES="
 TYPES_LIST="
     CONDITION_VARIABLE_Ptr
     DXVA_PicParams_HEVC
+    DXVA_PicParams_VP9
     kCMVideoCodecType_HEVC
     socklen_t
     struct_addrinfo
@@ -2763,11 +2764,11 @@ vp9_cuvid_hwaccel_deps="cuda cuvid"
 vp9_cuvid_hwaccel_select="vp9_cuvid_decoder"
 vp8_mediacodec_hwaccel_deps="mediacodec"
 vp8_qsv_hwaccel_deps="libmfx"
-vp9_d3d11va_hwaccel_deps="d3d11va DXVA_PicParams_VP9"
+vp9_d3d11va_hwaccel_deps="d3d11va"
 vp9_d3d11va_hwaccel_select="vp9_decoder"
-vp9_d3d11va2_hwaccel_deps="d3d11va DXVA_PicParams_VP9"
+vp9_d3d11va2_hwaccel_deps="d3d11va"
 vp9_d3d11va2_hwaccel_select="vp9_decoder"
-vp9_dxva2_hwaccel_deps="dxva2 DXVA_PicParams_VP9"
+vp9_dxva2_hwaccel_deps="dxva2"
 vp9_dxva2_hwaccel_select="vp9_decoder"
 vp9_mediacodec_hwaccel_deps="mediacodec"
 vp9_vaapi_hwaccel_deps="vaapi VADecPictureParameterBufferVP9_bit_depth"
