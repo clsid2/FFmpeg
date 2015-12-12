@@ -232,9 +232,9 @@ static char *make_digest_auth(HTTPAuthState *state, const char *username,
     if (digest->opaque[0])
         av_strlcatf(authstr, len, ", opaque=\"%s\"", digest->opaque);
     if (digest->qop[0]) {
-        av_strlcatf(authstr, len, ", qop=\"%s\"",    digest->qop);
-        av_strlcatf(authstr, len, ", cnonce=\"%s\"", cnonce);
+        av_strlcatf(authstr, len, ", qop=%s",        digest->qop);
         av_strlcatf(authstr, len, ", nc=%s",         nc);
+        av_strlcatf(authstr, len, ", cnonce=\"%s\"", cnonce);
     }
 
     av_strlcatf(authstr, len, "\r\n");
