@@ -47,6 +47,7 @@ extern AVCodecParser ff_gsm_parser;
 extern AVCodecParser ff_h261_parser;
 extern AVCodecParser ff_h263_parser;
 extern AVCodecParser ff_h264_parser;
+extern AVCodecParser ff_h264_mvc_parser;
 extern AVCodecParser ff_hevc_parser;
 extern AVCodecParser ff_mjpeg_parser;
 extern AVCodecParser ff_mlp_parser;
