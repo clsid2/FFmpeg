@@ -72,6 +72,7 @@ extern const FFCodecParser ff_gsm_parser;
 extern const FFCodecParser ff_h261_parser;
 extern const FFCodecParser ff_h263_parser;
 extern const FFCodecParser ff_h264_parser;
+extern const FFCodecParser ff_h264_mvc_parser;
 extern const FFCodecParser ff_hevc_parser;
 extern const FFCodecParser ff_hdr_parser;
 extern const FFCodecParser ff_ipu_parser;
