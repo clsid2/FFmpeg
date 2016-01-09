@@ -76,7 +76,7 @@ static int h264_split(const uint8_t *buf, int buf_size)
         if ((state & 0xFFFFFF00) != 0x100)
             break;
         nalu_type = state & 0x1F;
-        if (nalu_type == H264_NAL_SPS) {
+        if (nalu_type == H264_NAL_SPS || nalu_type == H264_NAL_SUB_SPS) {
             has_sps = 1;
         } else if (nalu_type == H264_NAL_PPS)
             has_pps = 1;
@@ -204,6 +204,7 @@ static int remove_extradata(AVBSFContext *ctx, AVPacket *pkt)
             i = mpeg4video_split(pkt->data, pkt->size);
             break;
         case AV_CODEC_ID_H264:
+        case AV_CODEC_ID_H264_MVC:
             i = h264_split(pkt->data, pkt->size);
             break;
         case AV_CODEC_ID_HEVC:
