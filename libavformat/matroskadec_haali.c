@@ -1169,11 +1169,19 @@ static int mkv_read_header(AVFormatContext *s)
       }
 
       /* export stereo mode flag as metadata tag */
-      /* if (track->video.stereo_mode && track->video.stereo_mode < MATROSKA_VIDEO_STEREO_MODE_COUNT)
-      av_dict_set(&st->metadata, "stereo_mode", matroska_video_stereo_mode[track->video.stereo_mode], 0);
+      if (info->AV.Video.StereoMode && info->AV.Video.StereoMode < MATROSKA_VIDEO_STEREOMODE_TYPE_NB)
+        av_dict_set(&st->metadata, "stereo_mode", ff_matroska_video_stereo_mode[info->AV.Video.StereoMode], 0);
+
+      // add stream level stereo3d side data if it is a supported format
+      if (info->AV.Video.StereoMode < MATROSKA_VIDEO_STEREOMODE_TYPE_NB &&
+        info->AV.Video.StereoMode != 10 && info->AV.Video.StereoMode != 12) {
+        int ret = ff_mkv_stereo3d_conv(st, info->AV.Video.StereoMode);
+        if (ret < 0)
+            return ret;
+      }
 
       // if we have virtual track, mark the real tracks
-      for (j=0; j < track->operation.combine_planes.nb_elem; j++) {
+      /*for (j=0; j < track->operation.combine_planes.nb_elem; j++) {
         char buf[32];
         if (planes[j].type >= MATROSKA_VIDEO_STEREO_PLANE_COUNT)
           continue;
