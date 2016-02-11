@@ -1188,6 +1188,7 @@ void ff_hevc_pred_init_x86(HEVCPredContext *hpc, int bit_depth)
 {
     int mm_flags = av_get_cpu_flags();
 
+#ifndef _MSC_VER
     if (bit_depth == 8) {
         if (EXTERNAL_SSE4(mm_flags)) {
             HEVC_PRED(8);
@@ -1198,4 +1199,5 @@ void ff_hevc_pred_init_x86(HEVCPredContext *hpc, int bit_depth)
             HEVC_PRED(10);
         }
     }
+#endif
 }
