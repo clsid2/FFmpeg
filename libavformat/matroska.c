@@ -130,9 +130,9 @@ const AVMetadataConv ff_mkv_metadata_conv[] = {
 
 const char * const ff_matroska_video_stereo_mode[MATROSKA_VIDEO_STEREOMODE_TYPE_NB] = {
     "mono",
-    "left_right",
-    "bottom_top",
-    "top_bottom",
+    "sbs_lr",
+    "tb_rl",
+    "tb_lr",
     "checkerboard_rl",
     "checkerboard_lr",
     "row_interleaved_rl",
@@ -140,10 +140,10 @@ const char * const ff_matroska_video_stereo_mode[MATROSKA_VIDEO_STEREOMODE_TYPE_
     "col_interleaved_rl",
     "col_interleaved_lr",
     "anaglyph_cyan_red",
-    "right_left",
+    "sbs_rl",
     "anaglyph_green_magenta",
-    "block_lr",
-    "block_rl",
+    "mvc_lr",
+    "mvc_rl",
 };
 
 const char * const ff_matroska_video_stereo_plane[MATROSKA_VIDEO_STEREO_PLANE_COUNT] = {
