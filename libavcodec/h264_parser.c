@@ -57,12 +57,13 @@ typedef struct H264ParseContext {
     int nal_length_size;
     int got_first;
     int picture_structure;
-    uint8_t parse_history[6];
+    uint8_t parse_history[9];
     int parse_history_count;
     int parse_last_mb;
     int64_t reference_dts;
     int last_frame_num, last_picture_structure;
     int is_mvc;
+    int slice_ext;
 } H264ParseContext;
 
 
@@ -120,18 +121,17 @@ static int h264_find_frame_end(H264ParseContext *p, const uint8_t *buf,
                        nalu_type == H264_NAL_IDR_SLICE || (p->is_mvc && nalu_type == H264_NAL_SLICE_EXT)) {
                 state += 8;
 
-                if (nalu_type == H264_NAL_SLICE_EXT)
-                    i += 3; // skip mvc extension
+                p->slice_ext = (nalu_type == H264_NAL_SLICE_EXT);
                 continue;
             }
             state = 7;
         } else {
             p->parse_history[p->parse_history_count++] = buf[i];
-            if (p->parse_history_count > 5) {
+            if (p->parse_history_count > 8) {
                 unsigned int mb, last_mb = p->parse_last_mb;
                 GetBitContext gb;
 
-                init_get_bits(&gb, p->parse_history, 8*p->parse_history_count);
+                init_get_bits8(&gb, p->parse_history + 3*p->slice_ext, p->parse_history_count - 3*p->slice_ext);
                 p->parse_history_count = 0;
                 mb= get_ue_golomb_long(&gb);
                 p->parse_last_mb = mb;
@@ -154,7 +154,7 @@ found:
     pc->frame_start_found = 0;
     if (p->is_avc)
         return next_avc;
-    return i - (state & 5) - 5 * (state > 7);
+    return i - (state & 5) - 8 * (state > 7);
 }
 
 static int scan_mmco_reset(AVCodecParserContext *s, GetBitContext *gb,
