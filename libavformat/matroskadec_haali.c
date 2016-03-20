@@ -988,6 +988,33 @@ static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCo
   return 0;
 }
 
+static int get_qt_codec(TrackInfo *track, uint32_t *fourcc, enum AVCodecID *codec_id)
+{
+    const AVCodecTag *codec_tags;
+
+    codec_tags = track->Type == TT_VIDEO ?
+            ff_codec_movvideo_tags : ff_codec_movaudio_tags;
+
+    /* Normalize noncompliant private data that starts with the fourcc
+     * by expanding/shifting the data by 4 bytes and storing the data
+     * size at the start. */
+    if (ff_codec_get_id(codec_tags, AV_RL32((uint8_t*)track->CodecPrivate))) {
+        uint8_t *p = av_realloc(track->CodecPrivate,
+                                track->CodecPrivateSize + 4);
+        if (!p)
+            return AVERROR(ENOMEM);
+        memmove(p + 4, p, track->CodecPrivateSize);
+        track->CodecPrivate = p;
+        track->CodecPrivateSize += 4;
+        AV_WB32((uint8_t*)track->CodecPrivate, track->CodecPrivateSize);
+    }
+
+    *fourcc = AV_RL32((uint8_t*)track->CodecPrivate + 4);
+    *codec_id = ff_codec_get_id(codec_tags, *fourcc);
+
+    return 0;
+}
+
 static int mkv_read_header(AVFormatContext *s)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
@@ -1096,19 +1123,47 @@ static int mkv_read_header(AVFormatContext *s)
       if (ret < 0)
         return ret;
       codec_id = st->codec->codec_id;
-    } else if (!strcmp(info->CodecID, "A_QUICKTIME") && (info->CodecPrivateSize >= 86) && (info->CodecPrivate != NULL)) {
-      fourcc = AV_RL32((uint8_t *)info->CodecPrivate + 4);
-      codec_id = ff_codec_get_id(ff_codec_movaudio_tags, fourcc);
-      if (ff_codec_get_id(ff_codec_movaudio_tags, AV_RL32((uint8_t *)info->CodecPrivate))) {
-        fourcc = AV_RL32((uint8_t *)info->CodecPrivate);
-        codec_id = ff_codec_get_id(ff_codec_movaudio_tags, fourcc);
+    } else if (!strcmp(info->CodecID, "A_QUICKTIME") && (info->CodecPrivateSize >= 32) && (info->CodecPrivate != NULL)) {
+      uint16_t sample_size;
+      int ret = get_qt_codec(info, &fourcc, &codec_id);
+      if (ret < 0)
+          return ret;
+      sample_size = AV_RB16((uint8_t *)info->CodecPrivate + 26);
+      if (fourcc == 0) {
+        if (sample_size == 8) {
+          fourcc = MKTAG('r','a','w',' ');
+          codec_id = ff_codec_get_id(ff_codec_movaudio_tags, fourcc);
+        } else if (sample_size == 16) {
+          fourcc = MKTAG('t','w','o','s');
+          codec_id = ff_codec_get_id(ff_codec_movaudio_tags, fourcc);
+        }
       }
-    } else if (!strcmp(info->CodecID, "V_QUICKTIME") && (info->CodecPrivateSize >= 86) && (info->CodecPrivate != NULL)) {
-      fourcc = AV_RL32((uint8_t *)info->CodecPrivate + 4);
-      codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
-      if (ff_codec_get_id(ff_codec_movvideo_tags, AV_RL32((uint8_t *)info->CodecPrivate))) {
-        fourcc = AV_RL32((uint8_t *)info->CodecPrivate);
+      if ((fourcc == MKTAG('t','w','o','s') ||
+              fourcc == MKTAG('s','o','w','t')) &&
+              sample_size == 8)
+        codec_id = AV_CODEC_ID_PCM_S8;
+    } else if (!strcmp(info->CodecID, "V_QUICKTIME") && (info->CodecPrivateSize >= 21) && (info->CodecPrivate != NULL)) {
+      int ret = get_qt_codec(info, &fourcc, &codec_id);
+      if (ret < 0)
+        return ret;
+      if (codec_id == AV_CODEC_ID_NONE && AV_RL32((uint8_t *)info->CodecPrivate+4) == AV_RL32("SMI ")) {
+        fourcc = MKTAG('S','V','Q','3');
         codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
+      }
+      if (codec_id == AV_CODEC_ID_NONE) {
+        char buf[32];
+        av_get_codec_tag_string(buf, sizeof(buf), fourcc);
+        av_log(s, AV_LOG_ERROR, "mov FourCC not found %s.\n", buf);
+      }
+      if (info->CodecPrivateSize >= 86) {
+        bit_depth = AV_RB16((uint8_t *)info->CodecPrivate + 82);
+        /*ffio_init_context(&b, (uint8_t *)info->CodecPrivate,
+                          info->CodecPrivateSize,
+                          0, NULL, NULL, NULL, NULL);
+        if (ff_get_qtpalette(codec_id, &b, track->palette)) {
+            bit_depth &= 0x1F;
+            track->has_palette = 1;
+        }*/
       }
     } else if (!strcmp(info->CodecID, "V_PRORES") && (info->CodecPrivateSize == 4) && (info->CodecPrivate != NULL)) {
       fourcc = AV_RL32((uint8_t *)info->CodecPrivate);
