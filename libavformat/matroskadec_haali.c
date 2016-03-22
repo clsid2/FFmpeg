@@ -853,9 +853,40 @@ static void mkv_process_tags_edition(AVFormatContext *s, ulonglong UID, struct S
   }
 }
 
+static void matroska_convert_tag(AVFormatContext *s, Tag *tag,
+                                 AVDictionary **metadata, char *prefix)
+{
+    const struct SimpleTag *tags = tag->SimpleTags;
+    char key[1024];
+    int i;
+
+    for (i = 0; i < tag->nSimpleTags; i++) {
+        const char *lang = (tags[i].Language[0] && strcmp(tags[i].Language, "und")) ? tags[i].Language : NULL;
+
+        if (!tags[i].Name) {
+            av_log(s, AV_LOG_WARNING, "Skipping invalid tag with no TagName.\n");
+            continue;
+        }
+        if (prefix)
+            snprintf(key, sizeof(key), "%s/%s", prefix, tags[i].Name);
+        else
+            av_strlcpy(key, tags[i].Name, sizeof(key));
+        if (tags[i].Default || !lang) {
+            av_dict_set(metadata, key, tags[i].Value, 0);
+        }
+        if (lang) {
+            av_strlcat(key, "-", sizeof(key));
+            av_strlcat(key, lang, sizeof(key));
+            av_dict_set(metadata, key, tags[i].Value, 0);
+        }
+    }
+    ff_metadata_conv(metadata, NULL, ff_mkv_metadata_conv);
+}
+
 static void mkv_process_tags(AVFormatContext *s, Tag *tags, unsigned int tagCount)
 {
-  unsigned i, j;
+  MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
+  unsigned i, j, k;
   for (i = 0; i < tagCount; i++) {
     Tag *tag = &tags[i];
     if (tag->nSimpleTags > 0 && tag->nTargets > 0) {
@@ -867,12 +898,21 @@ static void mkv_process_tags(AVFormatContext *s, Tag *tags, unsigned int tagCoun
           /* unsupported */
           break;
         case TARGET_TRACK:
+          for (k = 0; k < ctx->num_tracks; k++) {
+            if (ctx->tracks[k].info->UID == tag->Targets[j].UID) {
+              matroska_convert_tag(s, tag, &ctx->tracks[k].stream->metadata, NULL);
+              break;
+            }
+          }
           break;
         case TARGET_EDITION:
           mkv_process_tags_edition(s, tag->Targets[j].UID, tag->SimpleTags, tag->nSimpleTags);
           break;
         }
       }
+    } else if (tags->nSimpleTags > 0) {
+      // global tags
+      matroska_convert_tag(s, tag, &s->metadata, NULL);
     }
   }
 }
