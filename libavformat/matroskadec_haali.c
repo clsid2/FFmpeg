@@ -935,18 +935,18 @@ static void mkv_process_attachments(AVFormatContext *s, MatroskaSegment *segment
         break;
       av_dict_set(&st->metadata, "filename", attach->Name, 0);
       av_dict_set(&st->metadata, "mimetype", attach->MimeType, 0);
-      st->codec->codec_id = AV_CODEC_ID_NONE;
-      st->codec->codec_type = AVMEDIA_TYPE_ATTACHMENT;
+      st->codecpar->codec_id = AV_CODEC_ID_NONE;
+      st->codecpar->codec_type = AVMEDIA_TYPE_ATTACHMENT;
 
-      st->codec->extradata = (uint8_t *)av_malloc((size_t)attach->Length + FF_INPUT_BUFFER_PADDING_SIZE);
-      if(st->codec->extradata == NULL)
+      st->codecpar->extradata = (uint8_t *)av_malloc((size_t)attach->Length + FF_INPUT_BUFFER_PADDING_SIZE);
+      if(st->codecpar->extradata == NULL)
         break;
-      st->codec->extradata_size = (int)attach->Length;
-      aviostream_read(segment->iostream, attach->Position, st->codec->extradata, st->codec->extradata_size);
+      st->codecpar->extradata_size = (int)attach->Length;
+      aviostream_read(segment->iostream, attach->Position, st->codecpar->extradata, st->codecpar->extradata_size);
 
       for (i=0; ff_mkv_mime_tags[i].id != AV_CODEC_ID_NONE; i++) {
         if (!strncmp(ff_mkv_mime_tags[i].str, attach->MimeType, strlen(ff_mkv_mime_tags[i].str))) {
-          st->codec->codec_id = ff_mkv_mime_tags[i].id;
+          st->codecpar->codec_id = ff_mkv_mime_tags[i].id;
           break;
         }
       }
@@ -1148,7 +1148,7 @@ static int mkv_read_header(AVFormatContext *s)
 
     avpriv_set_pts_info(st, 64, 1, 1000*1000*1000); /* 64 bit pts in ns */
 
-    ret = mkv_generate_extradata(s, info, codec_id, &st->codec->extradata, &st->codec->extradata_size);
+    ret = mkv_generate_extradata(s, info, codec_id, &st->codecpar->extradata, &st->codecpar->extradata_size);
     if (ret < 0)
       return ret;
 
@@ -1159,10 +1159,10 @@ static int mkv_read_header(AVFormatContext *s)
       codec_id = ff_codec_get_id(ff_codec_bmp_tags, fourcc);
     } else if (!strcmp(info->CodecID, "A_MS/ACM") && info->CodecPrivateSize >= 14 && info->CodecPrivate != NULL) {
       ffio_init_context(&b, (uint8_t *)info->CodecPrivate, info->CodecPrivateSize, 0, NULL, NULL, NULL, NULL);
-      ret = ff_get_wav_header(s, &b, st->codec, info->CodecPrivateSize, 0);
+      ret = ff_get_wav_header(s, &b, st->codecpar, info->CodecPrivateSize, 0);
       if (ret < 0)
         return ret;
-      codec_id = st->codec->codec_id;
+      codec_id = st->codecpar->codec_id;
     } else if (!strcmp(info->CodecID, "A_QUICKTIME") && (info->CodecPrivateSize >= 32) && (info->CodecPrivate != NULL)) {
       uint16_t sample_size;
       int ret = get_qt_codec(info, &fourcc, &codec_id);
@@ -1226,7 +1226,7 @@ static int mkv_read_header(AVFormatContext *s)
     if (codec_id == AV_CODEC_ID_NONE)
       av_log(s, AV_LOG_VERBOSE, "Unknown/unsupported CodecID: %s", info->CodecID);
     /* refresh codec id, if changed above */
-    st->codec->codec_id = codec_id;
+    st->codecpar->codec_id = codec_id;
 
     if (strlen(info->Language) == 0) /* default english language if none is set */
       av_dict_set(&st->metadata, "language", "eng", 0);
@@ -1242,19 +1242,19 @@ static int mkv_read_header(AVFormatContext *s)
       st->disposition |= AV_DISPOSITION_FORCED;
 
     if (info->Type == TT_VIDEO) {
-      st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-      st->codec->codec_tag  = fourcc;
+      st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+      st->codecpar->codec_tag  = fourcc;
       if (bit_depth >= 0)
-        st->codec->bits_per_coded_sample = bit_depth;
-      st->codec->width  = info->AV.Video.PixelWidth;
-      st->codec->height = info->AV.Video.PixelHeight;
+        st->codecpar->bits_per_coded_sample = bit_depth;
+      st->codecpar->width  = info->AV.Video.PixelWidth;
+      st->codecpar->height = info->AV.Video.PixelHeight;
       if (info->AV.Video.DisplayWidth && info->AV.Video.DisplayHeight) {
         av_reduce(&st->sample_aspect_ratio.num, &st->sample_aspect_ratio.den,
-          st->codec->height * info->AV.Video.DisplayWidth,
-          st->codec-> width * info->AV.Video.DisplayHeight,
+          st->codecpar->height * info->AV.Video.DisplayWidth,
+          st->codecpar-> width * info->AV.Video.DisplayHeight,
           1 << 30);
       }
-      if (st->codec->codec_id != AV_CODEC_ID_H264 && st->codec->codec_id != AV_CODEC_ID_HEVC)
+      if (st->codecpar->codec_id != AV_CODEC_ID_H264 && st->codecpar->codec_id != AV_CODEC_ID_HEVC)
         st->need_parsing = AVSTREAM_PARSE_HEADERS;
       av_log(s, AV_LOG_DEBUG, "Default Duration: %"PRId64"\n", info->DefaultDuration);
       if (info->DefaultDuration && info->DefaultDuration > 8000000) {
@@ -1288,22 +1288,22 @@ static int mkv_read_header(AVFormatContext *s)
           }
       } */
     } else if (info->Type == TT_AUDIO) {
-      st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-      st->codec->sample_rate = (unsigned int)info->AV.Audio.OutputSamplingFreq;
-      st->codec->channels = info->AV.Audio.Channels;
-      if (st->codec->codec_id == AV_CODEC_ID_MP3)
+      st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+      st->codecpar->sample_rate = (unsigned int)info->AV.Audio.OutputSamplingFreq;
+      st->codecpar->channels = info->AV.Audio.Channels;
+      if (st->codecpar->codec_id == AV_CODEC_ID_MP3)
         st->need_parsing = AVSTREAM_PARSE_FULL;
-      else if (st->codec->codec_id != AV_CODEC_ID_AAC && st->codec->codec_id != AV_CODEC_ID_MLP && st->codec->codec_id != AV_CODEC_ID_TRUEHD)
+      else if (st->codecpar->codec_id != AV_CODEC_ID_AAC && st->codecpar->codec_id != AV_CODEC_ID_MLP && st->codecpar->codec_id != AV_CODEC_ID_TRUEHD)
         st->need_parsing = AVSTREAM_PARSE_HEADERS;
       if (track->info->CodecDelay > 0) {
-        st->codec->delay = av_rescale_q(track->info->CodecDelay, (AVRational){1, 1000000000}, (AVRational){1, st->codec->sample_rate});
+        st->codecpar->initial_padding = av_rescale_q(track->info->CodecDelay, (AVRational){1, 1000000000}, (AVRational){1, st->codecpar->sample_rate});
       }
       if (track->info->SeekPreRoll > 0) {
-        av_codec_set_seek_preroll(st->codec, av_rescale_q(track->info->SeekPreRoll, (AVRational){1, 1000000000}, (AVRational){1, st->codec->sample_rate}));
+        st->codecpar->seek_preroll = av_rescale_q(track->info->SeekPreRoll, (AVRational){1, 1000000000}, (AVRational){1, st->codecpar->sample_rate});
       }
     } else if (info->Type == TT_SUB) {
-      st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
-      if (st->codec->codec_id == AV_CODEC_ID_ASS) {
+      st->codecpar->codec_type = AVMEDIA_TYPE_SUBTITLE;
+      if (st->codecpar->codec_id == AV_CODEC_ID_ASS) {
         /* HACK: Try to get the privdata of the main segments SSA track, otherwise DirectShow renderers fail */
         unsigned num = mkv_GetNumTracks(ctx->segments[0]->matroska);
         if (num > i) {
@@ -1312,9 +1312,9 @@ static int mkv_read_header(AVFormatContext *s)
           info = mkv_GetTrackInfo(ctx->segments[0]->matroska, i);
           ret = mkv_generate_extradata(s, info, codec_id, &main_extradata, &main_extradata_size);
           if (ret == 0 && main_extradata_size && main_extradata) {
-            av_freep(&st->codec->extradata);
-            st->codec->extradata = main_extradata;
-            st->codec->extradata_size = main_extradata_size;
+            av_freep(&st->codecpar->extradata);
+            st->codecpar->extradata = main_extradata;
+            st->codecpar->extradata_size = main_extradata_size;
           }
         }
       }
@@ -1619,7 +1619,7 @@ again:
       if (ret < 0) {
         av_log(s, AV_LOG_ERROR, "cs_ReadData failed");
         av_freep(&frame_data);
-        av_free_packet(pkt);
+        av_packet_unref(pkt);
         return AVERROR(EIO);
       } else if (ret == 0) {
         size = frame_size;
@@ -1651,18 +1651,18 @@ again:
     }
   }
 
-  if (track->stream->codec->codec_id == AV_CODEC_ID_WAVPACK) {
+  if (track->stream->codecpar->codec_id == AV_CODEC_ID_WAVPACK) {
     uint8_t *wv_data;
     int wv_size = pkt->size;
     ret = matroska_parse_wavpack(track, pkt->data, &wv_data, &wv_size);
     if (ret < 0) {
         av_log(s, AV_LOG_ERROR, "Error parsing a wavpack block.\n");
-        av_free_packet(pkt);
+        av_packet_unref(pkt);
         return ret;
     }
     av_buffer_unref(&pkt->buf);
     av_packet_from_data(pkt, wv_data, wv_size);
-  } else if (track->stream->codec->codec_id == AV_CODEC_ID_DVB_SUBTITLE && pkt->size >= 2 && AV_RB16(pkt->data) != 0x2000) {
+  } else if (track->stream->codecpar->codec_id == AV_CODEC_ID_DVB_SUBTITLE && pkt->size >= 2 && AV_RB16(pkt->data) != 0x2000) {
     int dvbsize = pkt->size + 2;
     uint8_t *dvbdata = av_malloc(dvbsize + FF_INPUT_BUFFER_PADDING_SIZE);
     AV_WB16(dvbdata, 0x2000);
@@ -1682,7 +1682,7 @@ again:
   }
 
   if (track->refresh_extradata) {
-    mkv_packet_param_change(s, track->info, track->stream->codec->codec_id, pkt);
+    mkv_packet_param_change(s, track->info, track->stream->codecpar->codec_id, pkt);
     track->refresh_extradata = 0;
   }
 
@@ -1691,12 +1691,12 @@ again:
                                                  AV_PKT_DATA_SKIP_SAMPLES,
                                                  10);
     if(side_data == NULL) {
-      av_free_packet(pkt);
+      av_packet_unref(pkt);
       return AVERROR(ENOMEM);
     }
     discard_padding = av_rescale_q(discard_padding,
                                    (AVRational){1, 1000000000},
-                                   (AVRational){1, track->stream->codec->sample_rate});
+                                   (AVRational){1, track->stream->codecpar->sample_rate});
     if (discard_padding > 0) {
       AV_WL32(side_data, 0);
       AV_WL32(side_data + 4, discard_padding);
