@@ -899,7 +899,7 @@ static void mkv_process_tags(AVFormatContext *s, Tag *tags, unsigned int tagCoun
           break;
         case TARGET_TRACK:
           for (k = 0; k < ctx->num_tracks; k++) {
-            if (ctx->tracks[k].info->UID == tag->Targets[j].UID) {
+            if (ctx->tracks[k].info->UID == tag->Targets[j].UID && ctx->tracks[k].stream) {
               matroska_convert_tag(s, tag, &ctx->tracks[k].stream->metadata, NULL);
               break;
             }
