@@ -1165,7 +1165,7 @@ static int mkv_read_header(AVFormatContext *s)
       codec_id = st->codecpar->codec_id;
     } else if (!strcmp(info->CodecID, "A_QUICKTIME") && (info->CodecPrivateSize >= 32) && (info->CodecPrivate != NULL)) {
       uint16_t sample_size;
-      int ret = get_qt_codec(info, &fourcc, &codec_id);
+      ret = get_qt_codec(info, &fourcc, &codec_id);
       if (ret < 0)
           return ret;
       sample_size = AV_RB16((uint8_t *)info->CodecPrivate + 26);
@@ -1183,7 +1183,7 @@ static int mkv_read_header(AVFormatContext *s)
               sample_size == 8)
         codec_id = AV_CODEC_ID_PCM_S8;
     } else if (!strcmp(info->CodecID, "V_QUICKTIME") && (info->CodecPrivateSize >= 21) && (info->CodecPrivate != NULL)) {
-      int ret = get_qt_codec(info, &fourcc, &codec_id);
+      ret = get_qt_codec(info, &fourcc, &codec_id);
       if (ret < 0)
         return ret;
       if (codec_id == AV_CODEC_ID_NONE && AV_RL32((uint8_t *)info->CodecPrivate+4) == AV_RL32("SMI ")) {
@@ -1270,7 +1270,7 @@ static int mkv_read_header(AVFormatContext *s)
       // add stream level stereo3d side data if it is a supported format
       if (info->AV.Video.StereoMode < MATROSKA_VIDEO_STEREOMODE_TYPE_NB &&
         info->AV.Video.StereoMode != 10 && info->AV.Video.StereoMode != 12) {
-        int ret = ff_mkv_stereo3d_conv(st, info->AV.Video.StereoMode);
+        ret = ff_mkv_stereo3d_conv(st, info->AV.Video.StereoMode);
         if (ret < 0)
             return ret;
       }
@@ -1671,7 +1671,7 @@ again:
     av_buffer_unref(&pkt->buf);
     av_packet_from_data(pkt, dvbdata, dvbsize);
   } else if (!strcmp(track->info->CodecID, "V_PRORES")) {
-    int size = pkt->size + 8;
+    size = pkt->size + 8;
     uint8_t *buf = av_malloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
     AV_WB32(buf, pkt->size);
     AV_WB32(buf + 4, MKBETAG('i', 'c', 'p', 'f'));
