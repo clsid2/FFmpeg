@@ -36,6 +36,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/avstring.h"
 #include "libavutil/dict.h"
+#include "libavutil/mastering_display_metadata.h"
 #if CONFIG_ZLIB
 #include <zlib.h>
 #endif
@@ -1055,6 +1056,79 @@ static int get_qt_codec(TrackInfo *track, uint32_t *fourcc, enum AVCodecID *code
     return 0;
 }
 
+static int mkv_parse_video_color(AVStream *st, TrackInfo *info)
+{
+    // Mastering primaries are CIE 1931 coords, and must be > 0.
+    const int has_mastering_primaries =
+        info->AV.Video.Colour.MasteringMetadata.PrimaryRChromaticityX > 0 && info->AV.Video.Colour.MasteringMetadata.PrimaryRChromaticityY > 0 &&
+        info->AV.Video.Colour.MasteringMetadata.PrimaryGChromaticityX > 0 && info->AV.Video.Colour.MasteringMetadata.PrimaryGChromaticityY > 0 &&
+        info->AV.Video.Colour.MasteringMetadata.PrimaryBChromaticityX > 0 && info->AV.Video.Colour.MasteringMetadata.PrimaryBChromaticityY > 0 &&
+        info->AV.Video.Colour.MasteringMetadata.WhitePointChromaticityX > 0 && info->AV.Video.Colour.MasteringMetadata.WhitePointChromaticityY > 0;
+    const int has_mastering_luminance = info->AV.Video.Colour.MasteringMetadata.LuminanceMax > 0;
+
+    if (info->AV.Video.Colour.MatrixCoefficients != AVCOL_SPC_RESERVED)
+        st->codecpar->color_space = info->AV.Video.Colour.MatrixCoefficients;
+    if (info->AV.Video.Colour.Primaries != AVCOL_PRI_RESERVED &&
+        info->AV.Video.Colour.Primaries != AVCOL_PRI_RESERVED0)
+        st->codecpar->color_primaries = info->AV.Video.Colour.Primaries;
+    if (info->AV.Video.Colour.TransferCharacteristics != AVCOL_TRC_RESERVED &&
+        info->AV.Video.Colour.TransferCharacteristics != AVCOL_TRC_RESERVED0)
+        st->codecpar->color_trc = info->AV.Video.Colour.TransferCharacteristics;
+    if (info->AV.Video.Colour.Range != AVCOL_RANGE_UNSPECIFIED &&
+        info->AV.Video.Colour.Range <= AVCOL_RANGE_JPEG)
+        st->codecpar->color_range = info->AV.Video.Colour.Range;
+    if (info->AV.Video.Colour.ChromaSitingHorz != MATROSKA_COLOUR_CHROMASITINGHORZ_UNDETERMINED &&
+        info->AV.Video.Colour.ChromaSitingVert != MATROSKA_COLOUR_CHROMASITINGVERT_UNDETERMINED &&
+        info->AV.Video.Colour.ChromaSitingHorz   < MATROSKA_COLOUR_CHROMASITINGHORZ_NB &&
+        info->AV.Video.Colour.ChromaSitingVert  < MATROSKA_COLOUR_CHROMASITINGVERT_NB) {
+        st->codecpar->chroma_location =
+            avcodec_chroma_pos_to_enum((info->AV.Video.Colour.ChromaSitingHorz - 1) << 7,
+                                       (info->AV.Video.Colour.ChromaSitingVert - 1) << 7);
+    }
+
+    if (has_mastering_primaries || has_mastering_luminance) {
+        // Use similar rationals as other standards.
+        const int chroma_den = 50000;
+        const int luma_den = 10000;
+        AVMasteringDisplayMetadata *metadata =
+            (AVMasteringDisplayMetadata*) av_stream_new_side_data(
+                st, AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
+                sizeof(AVMasteringDisplayMetadata));
+        if (!metadata) {
+            return AVERROR(ENOMEM);
+        }
+        memset(metadata, 0, sizeof(AVMasteringDisplayMetadata));
+        if (has_mastering_primaries) {
+            metadata->display_primaries[0][0] = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.PrimaryRChromaticityX * chroma_den), chroma_den);
+            metadata->display_primaries[0][1] = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.PrimaryRChromaticityY * chroma_den), chroma_den);
+            metadata->display_primaries[1][0] = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.PrimaryGChromaticityX * chroma_den), chroma_den);
+            metadata->display_primaries[1][1] = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.PrimaryGChromaticityY * chroma_den), chroma_den);
+            metadata->display_primaries[2][0] = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.PrimaryBChromaticityX * chroma_den), chroma_den);
+            metadata->display_primaries[2][1] = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.PrimaryBChromaticityY * chroma_den), chroma_den);
+            metadata->white_point[0] = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.WhitePointChromaticityX * chroma_den), chroma_den);
+            metadata->white_point[1] = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.WhitePointChromaticityY * chroma_den), chroma_den);
+            metadata->has_primaries = 1;
+        }
+        if (has_mastering_luminance) {
+            metadata->max_luminance = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.LuminanceMax * luma_den), luma_den);
+            metadata->min_luminance = av_make_q(
+                round(info->AV.Video.Colour.MasteringMetadata.LuminanceMin * luma_den), luma_den);
+            metadata->has_luminance = 1;
+        }
+    }
+
+    return 0;
+}
+
 static int mkv_read_header(AVFormatContext *s)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
@@ -1275,6 +1349,9 @@ static int mkv_read_header(AVFormatContext *s)
             return ret;
       }
 
+      ret = mkv_parse_video_color(st, info);
+      if (ret < 0)
+          return ret;
       // if we have virtual track, mark the real tracks
       /*for (j=0; j < track->operation.combine_planes.nb_elem; j++) {
         char buf[32];
