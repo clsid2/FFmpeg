@@ -150,6 +150,33 @@ struct TrackInfo {
       unsigned int    CropL, CropT, CropR, CropB;
       unsigned int    ColourSpace;
       MKFLOAT	      GammaValue;
+      struct {
+          unsigned int MatrixCoefficients;
+          unsigned int BitsPerChannel;
+          unsigned int ChromaSubsamplingHorz;
+          unsigned int ChromaSubsamplingVert;
+          unsigned int CbSubsamplingHorz;
+          unsigned int CbSubsamplingVert;
+          unsigned int ChromaSitingHorz;
+          unsigned int ChromaSitingVert;
+          unsigned int Range;
+          unsigned int TransferCharacteristics;
+          unsigned int Primaries;
+          unsigned int MaxCLL;
+          unsigned int MaxFALL;
+          struct {
+              float PrimaryRChromaticityX;
+              float PrimaryRChromaticityY;
+              float PrimaryGChromaticityX;
+              float PrimaryGChromaticityY;
+              float PrimaryBChromaticityX;
+              float PrimaryBChromaticityY;
+              float WhitePointChromaticityX;
+              float WhitePointChromaticityY;
+              float LuminanceMax;
+              float LuminanceMin;
+          } MasteringMetadata;
+      } Colour;
 
       unsigned int  Interlaced:1;
     } Video;
