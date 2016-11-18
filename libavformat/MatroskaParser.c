@@ -1190,6 +1190,84 @@ out:
   ENDFOR(mf);
 }
 
+static void parseVideoColourInfo(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *ti) {
+  FOREACH(mf,toplen)
+    case 0x55b1:
+      ti->AV.Video.Colour.MatrixCoefficients = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55b2:
+      ti->AV.Video.Colour.BitsPerChannel = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55b3:
+      ti->AV.Video.Colour.ChromaSubsamplingHorz = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55b4:
+      ti->AV.Video.Colour.ChromaSubsamplingVert = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55b5:
+      ti->AV.Video.Colour.CbSubsamplingHorz = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55b6:
+      ti->AV.Video.Colour.CbSubsamplingVert = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55b7:
+      ti->AV.Video.Colour.ChromaSitingHorz = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55b8:
+      ti->AV.Video.Colour.ChromaSitingVert = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55b9:
+      ti->AV.Video.Colour.Range = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55ba:
+      ti->AV.Video.Colour.TransferCharacteristics = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55bb:
+      ti->AV.Video.Colour.Primaries = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55bc:
+      ti->AV.Video.Colour.MaxCLL = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55bd:
+      ti->AV.Video.Colour.MaxFALL = readUInt(mf,(unsigned)len);
+      break;
+    case 0x55d0:
+      FOREACH(mf,len)
+        case 0x55d1:
+          ti->AV.Video.Colour.MasteringMetadata.PrimaryRChromaticityX = readFloat(mf,(unsigned)len);
+          break;
+        case 0x55d2:
+          ti->AV.Video.Colour.MasteringMetadata.PrimaryRChromaticityY = readFloat(mf,(unsigned)len);
+          break;
+        case 0x55d3:
+          ti->AV.Video.Colour.MasteringMetadata.PrimaryGChromaticityX = readFloat(mf,(unsigned)len);
+          break;
+        case 0x55d4:
+          ti->AV.Video.Colour.MasteringMetadata.PrimaryGChromaticityY = readFloat(mf,(unsigned)len);
+          break;
+        case 0x55d5:
+          ti->AV.Video.Colour.MasteringMetadata.PrimaryBChromaticityX = readFloat(mf,(unsigned)len);
+          break;
+        case 0x55d6:
+          ti->AV.Video.Colour.MasteringMetadata.PrimaryBChromaticityY = readFloat(mf,(unsigned)len);
+          break;
+        case 0x55d7:
+          ti->AV.Video.Colour.MasteringMetadata.WhitePointChromaticityX = readFloat(mf,(unsigned)len);
+          break;
+        case 0x55d8:
+          ti->AV.Video.Colour.MasteringMetadata.WhitePointChromaticityY = readFloat(mf,(unsigned)len);
+          break;
+        case 0x55d9:
+          ti->AV.Video.Colour.MasteringMetadata.LuminanceMax = readFloat(mf,(unsigned)len);
+          break;
+        case 0x55da:
+          ti->AV.Video.Colour.MasteringMetadata.LuminanceMin = readFloat(mf,(unsigned)len);
+          break;
+      ENDFOR(mf);
+      break;
+  ENDFOR(mf);
+}
+
 static void parseVideoInfo(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *ti) {
   ulonglong v;
   char            dW = 0, dH = 0;
@@ -1271,6 +1349,9 @@ static void parseVideoInfo(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *t
       break;
     case 0x2fb523: // GammaValue
       ti->AV.Video.GammaValue = readFloat(mf,(unsigned)len);
+      break;
+    case 0x55b0: // Colour
+      parseVideoColourInfo(mf,len,ti);
       break;
   ENDFOR(mf);
 
@@ -1368,6 +1449,13 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
       if (v<1 || v>254)
         errorjmp(mf,"Invalid track type: %d",(int)v);
       t.Type = (unsigned char)v;
+
+      // Load type-dependent defaults
+      if (t.Type == TT_VIDEO) {
+        t.AV.Video.Colour.MatrixCoefficients = 2;
+        t.AV.Video.Colour.TransferCharacteristics = 2;
+        t.AV.Video.Colour.Primaries = 2;
+      }
       break;
     case 0xb9: // Enabled
       t.Enabled = readUInt(mf,(unsigned)len)!=0;
