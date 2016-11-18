@@ -1343,6 +1343,7 @@ static int mkv_read_header(AVFormatContext *s)
 
       // add stream level stereo3d side data if it is a supported format
       if (info->AV.Video.StereoMode < MATROSKA_VIDEO_STEREOMODE_TYPE_NB &&
+        info->AV.Video.StereoMode != MATROSKA_VIDEO_STEREOMODE_TYPE_MONO &&
         info->AV.Video.StereoMode != 10 && info->AV.Video.StereoMode != 12) {
         ret = ff_mkv_stereo3d_conv(st, info->AV.Video.StereoMode);
         if (ret < 0)
