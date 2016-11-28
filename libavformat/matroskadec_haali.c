@@ -1065,28 +1065,41 @@ static int mkv_parse_video_color(AVStream *st, TrackInfo *info)
         info->AV.Video.Colour.MasteringMetadata.PrimaryBChromaticityX > 0 && info->AV.Video.Colour.MasteringMetadata.PrimaryBChromaticityY > 0 &&
         info->AV.Video.Colour.MasteringMetadata.WhitePointChromaticityX > 0 && info->AV.Video.Colour.MasteringMetadata.WhitePointChromaticityY > 0;
     const int has_mastering_luminance = info->AV.Video.Colour.MasteringMetadata.LuminanceMax > 0;
+    int has_colorspace = 0;
 
-    if (info->AV.Video.Colour.MatrixCoefficients != AVCOL_SPC_RESERVED)
+    if (info->AV.Video.Colour.MatrixCoefficients != AVCOL_SPC_RESERVED &&
+        info->AV.Video.Colour.MatrixCoefficients != AVCOL_SPC_UNSPECIFIED) {
         st->codecpar->color_space = info->AV.Video.Colour.MatrixCoefficients;
+        has_colorspace = 1;
+    }
     if (info->AV.Video.Colour.Primaries != AVCOL_PRI_RESERVED &&
-        info->AV.Video.Colour.Primaries != AVCOL_PRI_RESERVED0)
+        info->AV.Video.Colour.Primaries != AVCOL_PRI_RESERVED0 &&
+        info->AV.Video.Colour.Primaries != AVCOL_PRI_UNSPECIFIED) {
         st->codecpar->color_primaries = info->AV.Video.Colour.Primaries;
+        has_colorspace = 1;
+    }
     if (info->AV.Video.Colour.TransferCharacteristics != AVCOL_TRC_RESERVED &&
-        info->AV.Video.Colour.TransferCharacteristics != AVCOL_TRC_RESERVED0)
+        info->AV.Video.Colour.TransferCharacteristics != AVCOL_TRC_RESERVED0 &&
+        info->AV.Video.Colour.TransferCharacteristics != AVCOL_TRC_UNSPECIFIED) {
         st->codecpar->color_trc = info->AV.Video.Colour.TransferCharacteristics;
+        has_colorspace = 1;
+    }
     if (info->AV.Video.Colour.Range != AVCOL_RANGE_UNSPECIFIED &&
-        info->AV.Video.Colour.Range <= AVCOL_RANGE_JPEG)
+        info->AV.Video.Colour.Range <= AVCOL_RANGE_JPEG) {
         st->codecpar->color_range = info->AV.Video.Colour.Range;
+        has_colorspace = 1;
+    }
     if (info->AV.Video.Colour.ChromaSitingHorz != MATROSKA_COLOUR_CHROMASITINGHORZ_UNDETERMINED &&
         info->AV.Video.Colour.ChromaSitingVert != MATROSKA_COLOUR_CHROMASITINGVERT_UNDETERMINED &&
-        info->AV.Video.Colour.ChromaSitingHorz   < MATROSKA_COLOUR_CHROMASITINGHORZ_NB &&
+        info->AV.Video.Colour.ChromaSitingHorz  < MATROSKA_COLOUR_CHROMASITINGHORZ_NB &&
         info->AV.Video.Colour.ChromaSitingVert  < MATROSKA_COLOUR_CHROMASITINGVERT_NB) {
         st->codecpar->chroma_location =
             avcodec_chroma_pos_to_enum((info->AV.Video.Colour.ChromaSitingHorz - 1) << 7,
                                        (info->AV.Video.Colour.ChromaSitingVert - 1) << 7);
+        has_colorspace = 1;
     }
 
-    if (has_mastering_primaries || has_mastering_luminance) {
+    if (has_mastering_primaries || has_mastering_luminance || has_colorspace) {
         // Use similar rationals as other standards.
         const int chroma_den = 50000;
         const int luma_den = 10000;
@@ -1123,6 +1136,15 @@ static int mkv_parse_video_color(AVStream *st, TrackInfo *info)
             metadata->min_luminance = av_make_q(
                 round(info->AV.Video.Colour.MasteringMetadata.LuminanceMin * luma_den), luma_den);
             metadata->has_luminance = 1;
+        }
+        if (has_colorspace) {
+            // set color properties in the metadata, so it can be differentiated from any codec data
+            metadata->color_range     = st->codecpar->color_range;
+            metadata->color_primaries = st->codecpar->color_primaries;
+            metadata->color_trc       = st->codecpar->color_trc;
+            metadata->colorspace      = st->codecpar->color_space;
+            metadata->chroma_location = st->codecpar->chroma_location;
+            metadata->has_colorspace  = 1;
         }
     }
 
