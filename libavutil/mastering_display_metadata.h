@@ -57,6 +57,30 @@ typedef struct AVMasteringDisplayMetadata {
     AVRational max_luminance;
 
     /**
+     * MPEG vs JPEG YUV range.
+     * It must be accessed using av_frame_get_color_range() and
+     * av_frame_set_color_range().
+     * - encoding: Set by user
+     * - decoding: Set by libavcodec
+     */
+    enum AVColorRange color_range;
+
+    enum AVColorPrimaries color_primaries;
+
+    enum AVColorTransferCharacteristic color_trc;
+
+    /**
+     * YUV colorspace type.
+     * It must be accessed using av_frame_get_colorspace() and
+     * av_frame_set_colorspace().
+     * - encoding: Set by user
+     * - decoding: Set by libavcodec
+     */
+    enum AVColorSpace colorspace;
+
+    enum AVChromaLocation chroma_location;
+
+    /**
      * Flag indicating whether the display primaries (and white point) are set.
      */
     int has_primaries;
@@ -66,6 +90,10 @@ typedef struct AVMasteringDisplayMetadata {
      */
     int has_luminance;
 
+    /**
+     * Flag indicating whether the color_range, color_primaries, color_trc, colorspace and chroma_location have been set
+     */
+    int has_colorspace;
 } AVMasteringDisplayMetadata;
 
 /**
