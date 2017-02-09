@@ -3445,10 +3445,10 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
     return;
   }
 
-  if (mf->nCues==0)
+  if (mf->nCues == 0)
     reindex(mf);
 
-  if (mf->nCues==0)
+  if (mf->nCues == 0)
     return;
 
   mf->flags &= ~MPF_ERROR;
@@ -3461,10 +3461,10 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
   GetSubtitlePreroll(mf, timecode, subPreQueues);
 
   for (;;) {
-    if (i>j) {
-      j = j>=0 ? j : 0;
+    if (i > j) {
+      j = j >= 0 ? j : 0;
 
-      if (setjmp(mf->jb)!=0)
+      if (setjmp(mf->jb) != 0)
         goto dealloc;
 
       mkv_SetTrackMask(mf,mf->trackMask);
@@ -3482,7 +3482,7 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
             goto again;
           }
 
-          for (n=0;n<mf->nTracks;++n) {
+          for (n = 0; n < mf->nTracks; ++n) {
             m_kftime[n] = MAXU64;
             m_seendf[n] = 0;
           }
@@ -3497,7 +3497,7 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
               goto dealloc;
 
             // drain queues until we get to the required timecode
-            for (n=0;n<mf->nTracks;++n) {
+            for (n = 0; n < mf->nTracks; ++n) {
               if (mf->Queues[n].head && (mf->Queues[n].head->Start<timecode || (m_seendf[n] == 0 && m_kftime[n] == MAXU64))) {
                 if (IS_DELTA(mf->Queues[n].head))
                   m_seendf[n] = 1;
@@ -3505,7 +3505,7 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
                   m_kftime[n] = mf->Queues[n].head->Start;
               }
 
-              while (mf->Queues[n].head && mf->Queues[n].head->Start<timecode)
+              while (mf->Queues[n].head && mf->Queues[n].head->Start < timecode)
               {
                 if (IS_DELTA(mf->Queues[n].head))
                   m_seendf[n] = 1;
@@ -3519,20 +3519,20 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
               // if it's not an audio track (we accept preroll within a frame for audio), and the head frame
               // is a keyframe
               if (!(flags & MKVF_SEEK_TO_PREV_KEYFRAME_STRICT))
-                if (mf->Queues[n].head && (mf->Tracks[n]->Type != TT_AUDIO || mf->Queues[n].head->Start<=timecode))
+                if (mf->Queues[n].head && (mf->Tracks[n]->Type != TT_AUDIO || mf->Queues[n].head->Start <= timecode))
                   if (!IS_DELTA(mf->Queues[n].head))
                     m_kftime[n] = mf->Queues[n].head->Start;
             }
 
-            for (n=0;n<mf->nTracks;++n)
-              if (mf->Queues[n].head && mf->Queues[n].head->Start>=timecode)
+            for (n = 0; n < mf->nTracks; ++n)
+              if (mf->Queues[n].head && mf->Queues[n].head->Start >= timecode)
                 goto found;
           }
 found:
 
-          for (n=0;n<mf->nTracks;++n)
-            if (!(mf->trackMask & (ULL(1)<<n)) && m_kftime[n]==MAXU64 &&
-                m_seendf[n] && j>0 && (mf->Tracks[n]->Type == TT_VIDEO || mf->Tracks[n]->Type == TT_AUDIO))
+          for (n = 0; n < mf->nTracks; ++n)
+            if (!(mf->trackMask & (ULL(1) << n)) && m_kftime[n] == MAXU64 &&
+                m_seendf[n] && j > 0 && (mf->Tracks[n]->Type == TT_VIDEO || mf->Tracks[n]->Type == TT_AUDIO))
             {
               // we need to restart the search from prev cue
               --j;
@@ -3543,7 +3543,7 @@ found:
 again:;
         }
       } else
-        for (n=0;n<mf->nTracks;++n)
+        for (n = 0; n < mf->nTracks; ++n)
           m_kftime[n] = timecode;
 
       // now seek to this timecode
@@ -3553,31 +3553,31 @@ again:;
       mf->tcCluster = mf->Cues[j].Time;
 
       // no timecodes for ignored streams
-      for (n=0;n<mf->nTracks;++n)
-        if (mf->trackMask & (ULL(1)<<n))
+      for (n = 0; n < mf->nTracks; ++n)
+        if (mf->trackMask & (ULL(1) << n))
             m_kftime[n] = MAXU64;
 
-      for (mask=mf->trackMask;;) {
+      for (mask = mf->trackMask;;) {
         if ((ret = fillQueues(mf,mask)) < 0 || ret == RBRESYNC)
           goto dealloc;
 
         // drain queues until we get to the required timecode
-        for (n=0;n<mf->nTracks;++n) {
+        for (n = 0; n < mf->nTracks; ++n) {
           struct QueueEntry *qe;
-          for (qe = mf->Queues[n].head;qe && qe->Start<m_kftime[n];qe = mf->Queues[n].head)
+          for (qe = mf->Queues[n].head; qe && qe->Start<m_kftime[n]; qe = mf->Queues[n].head)
             QFree(mf,QGet(&mf->Queues[n]));
         }
 
-        for (n=z=0;n<mf->nTracks;++n)
-          if (m_kftime[n]==MAXU64 || (mf->Queues[n].head && mf->Queues[n].head->Start>=m_kftime[n])) {
+        for (n = z = 0; n < mf->nTracks; ++n)
+          if (m_kftime[n] == MAXU64 || (mf->Queues[n].head && mf->Queues[n].head->Start >= m_kftime[n])) {
             ++z;
-            mask |= ULL(1)<<n;
+            mask |= ULL(1) << n;
           } else if (!(mf->Tracks[n]->Type == TT_VIDEO || mf->Tracks[n]->Type == TT_AUDIO)) {
             ++z;
           }
 
-        if (z==mf->nTracks) {
-          for (int i = 0; i<mf->nTracks; ++i) {
+        if (z == mf->nTracks) {
+          for (int i = 0; i < mf->nTracks; ++i) {
             if (subPreQueues[i].head) { // if the subPreQueues are not empty
               ulonglong fp = filepos(mf);
               struct QueueEntry *qe;
@@ -3604,12 +3604,12 @@ again:;
       }
     }
 
-    m = (i+j)>>1;
+    m = (i + j) >> 1;
 
     if (timecode < mf->Cues[m].Time)
-      j = m-1;
+      j = m - 1;
     else
-      i = m+1;
+      i = m + 1;
   }
 
 dealloc:
