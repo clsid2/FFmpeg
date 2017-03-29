@@ -43,6 +43,7 @@ typedef struct MPEG4AudioConfig {
     int channels;
     int ps;  ///< -1 implicit, 1 presence
     int frame_length_short;
+    int pce;
 } MPEG4AudioConfig;
 
 extern av_export_avcodec const int avpriv_mpeg4audio_sample_rates[16];
