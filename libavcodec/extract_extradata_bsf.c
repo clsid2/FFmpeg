@@ -135,10 +135,10 @@ static int extract_extradata_h2645(AVBSFContext *ctx, AVPacket *pkt,
                                    uint8_t **data, int *size)
 {
     static const int extradata_nal_types_hevc[] = {
-        HEVC_NAL_VPS, HEVC_NAL_SPS, HEVC_NAL_PPS,
+        HEVC_NAL_VPS, HEVC_NAL_SPS, HEVC_NAL_PPS, HEVC_NAL_SEI_PREFIX, HEVC_NAL_SEI_SUFFIX,
     };
     static const int extradata_nal_types_h264[] = {
-        H264_NAL_SPS, H264_NAL_PPS,
+        H264_NAL_SPS, H264_NAL_PPS, H264_NAL_SEI,
     };
 
     ExtractExtradataContext *s = ctx->priv_data;
