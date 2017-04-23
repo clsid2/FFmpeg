@@ -1148,6 +1148,19 @@ static int mkv_parse_video_color(AVStream *st, TrackInfo *info)
         }
     }
 
+    if (info->AV.Video.Colour.MaxCLL && info->AV.Video.Colour.MaxFALL) {
+        AVContentLightMetadata *metadata =
+            (AVContentLightMetadata*) av_stream_new_side_data(
+                st, AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
+                sizeof(AVContentLightMetadata));
+        if (!metadata) {
+            return AVERROR(ENOMEM);
+        }
+        memset(metadata, 0, sizeof(AVContentLightMetadata));
+        metadata->MaxCLL = info->AV.Video.Colour.MaxCLL;
+        metadata->MaxFALL = info->AV.Video.Colour.MaxFALL;
+    }
+
     return 0;
 }
 
