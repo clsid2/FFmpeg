@@ -1026,6 +1026,8 @@ retry:
                         av_log(s, AV_LOG_WARNING, "Adjusting next position due to index mismatch\n");
                         next = flv->validate_index[0].pos - 4;
                     }
+                    if (type < 0)
+                        flv->broken_sizes = 1;
                     goto skip;
                 } else if (type == TYPE_ONTEXTDATA) {
                     avpriv_request_sample(s, "OnTextData packet");
