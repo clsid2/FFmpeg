@@ -138,7 +138,7 @@ static int extract_extradata_h2645(AVBSFContext *ctx, AVPacket *pkt,
         HEVC_NAL_VPS, HEVC_NAL_SPS, HEVC_NAL_PPS, HEVC_NAL_SEI_PREFIX, HEVC_NAL_SEI_SUFFIX,
     };
     static const int extradata_nal_types_h264[] = {
-        H264_NAL_SPS, H264_NAL_PPS, H264_NAL_SEI,
+        H264_NAL_SPS, H264_NAL_SUB_SPS, H264_NAL_PPS, H264_NAL_SEI,
     };
 
     ExtractExtradataContext *s = ctx->priv_data;
@@ -169,7 +169,7 @@ static int extract_extradata_h2645(AVBSFContext *ctx, AVPacket *pkt,
                 if (nal->type == HEVC_NAL_SPS) has_sps = 1;
                 if (nal->type == HEVC_NAL_VPS) has_vps = 1;
             } else {
-                if (nal->type == H264_NAL_SPS) has_sps = 1;
+                if (nal->type == H264_NAL_SPS || nal->type == H264_NAL_SUB_SPS) has_sps = 1;
             }
         } else if (s->remove) {
             filtered_size += nal->raw_size + 3;
@@ -178,7 +178,7 @@ static int extract_extradata_h2645(AVBSFContext *ctx, AVPacket *pkt,
 
     if (extradata_size &&
         ((ctx->par_in->codec_id == AV_CODEC_ID_HEVC && has_sps && has_vps) ||
-         (ctx->par_in->codec_id == AV_CODEC_ID_H264 && has_sps))) {
+         ((ctx->par_in->codec_id == AV_CODEC_ID_H264 || ctx->par_in->codec_id == AV_CODEC_ID_H264_MVC) && has_sps))) {
         AVBufferRef *filtered_buf;
         uint8_t *extradata, *filtered_data;
 
@@ -334,6 +334,7 @@ static const struct {
     { AV_CODEC_ID_AVS2,       extract_extradata_mpeg4   },
     { AV_CODEC_ID_CAVS,       extract_extradata_mpeg4   },
     { AV_CODEC_ID_H264,       extract_extradata_h2645   },
+    { AV_CODEC_ID_H264_MVC,   extract_extradata_h2645   },
     { AV_CODEC_ID_HEVC,       extract_extradata_h2645   },
     { AV_CODEC_ID_MPEG1VIDEO, extract_extradata_mpeg12  },
     { AV_CODEC_ID_MPEG2VIDEO, extract_extradata_mpeg12  },
@@ -401,6 +402,7 @@ static const enum AVCodecID codec_ids[] = {
     AV_CODEC_ID_AVS2,
     AV_CODEC_ID_CAVS,
     AV_CODEC_ID_H264,
+    AV_CODEC_ID_H264_MVC,
     AV_CODEC_ID_HEVC,
     AV_CODEC_ID_MPEG1VIDEO,
     AV_CODEC_ID_MPEG2VIDEO,
