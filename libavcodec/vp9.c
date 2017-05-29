@@ -184,6 +184,7 @@ static int update_size(AVCodecContext *avctx, int w, int h)
 
         switch (s->pix_fmt) {
         case AV_PIX_FMT_YUV420P:
+        case AV_PIX_FMT_YUV420P10:
 #if CONFIG_VP9_DXVA2_HWACCEL
             *fmtp++ = AV_PIX_FMT_DXVA2_VLD;
 #endif
@@ -195,7 +196,6 @@ static int update_size(AVCodecContext *avctx, int w, int h)
             *fmtp++ = AV_PIX_FMT_VAAPI;
 #endif
             break;
-        case AV_PIX_FMT_YUV420P10:
         case AV_PIX_FMT_YUV420P12:
 #if CONFIG_VP9_VAAPI_HWACCEL
             *fmtp++ = AV_PIX_FMT_VAAPI;
