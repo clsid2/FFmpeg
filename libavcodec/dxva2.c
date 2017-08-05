@@ -748,14 +748,13 @@ static void *get_surface(const AVCodecContext *avctx, const AVFrame *frame)
 {
 #if CONFIG_D3D11VA
     if (frame->format == AV_PIX_FMT_D3D11) {
-        FFDXVASharedContext *sctx = DXVA_SHARED_CONTEXT(avctx);
+        AVDXVAContext *ctx = DXVA_CONTEXT(avctx);
         intptr_t index = (intptr_t)frame->data[1];
-        if (index < 0 || index >= sctx->nb_d3d11_views ||
-            sctx->d3d11_texture != (ID3D11Texture2D *)frame->data[0]) {
+        if (index < 0 || index >= D3D11VA_CONTEXT(ctx)->surface_count) {
             av_log((void *)avctx, AV_LOG_ERROR, "get_buffer frame is invalid!\n");
             return NULL;
         }
-        return sctx->d3d11_views[index];
+        return D3D11VA_CONTEXT(ctx)->surface[index];
     }
 #endif
     return frame->data[3];
