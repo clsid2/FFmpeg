@@ -61,7 +61,7 @@ static av_cold void load_functions(void)
         return;
 
     mD3D11CreateDevice = (PFN_D3D11_CREATE_DEVICE) GetProcAddress(d3dlib, "D3D11CreateDevice");
-    mCreateDXGIFactory = (PFN_CREATE_DXGI_FACTORY) GetProcAddress(dxgilib, "CreateDXGIFactory");
+    mCreateDXGIFactory = (PFN_CREATE_DXGI_FACTORY) GetProcAddress(dxgilib, "CreateDXGIFactory1");
 #else
     // In UWP (which lacks LoadLibrary), CreateDXGIFactory isn't available,
     // only CreateDXGIFactory1
@@ -539,13 +539,13 @@ static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
     }
 
     if (device) {
-        IDXGIFactory2 *pDXGIFactory;
-        hr = mCreateDXGIFactory(&IID_IDXGIFactory2, (void **)&pDXGIFactory);
+        IDXGIFactory1 *pDXGIFactory;
+        hr = mCreateDXGIFactory(&IID_IDXGIFactory1, (void **)&pDXGIFactory);
         if (SUCCEEDED(hr)) {
             int adapter = atoi(device);
-            if (FAILED(IDXGIFactory2_EnumAdapters(pDXGIFactory, adapter, &pAdapter)))
+            if (FAILED(IDXGIFactory1_EnumAdapters(pDXGIFactory, adapter, &pAdapter)))
                 pAdapter = NULL;
-            IDXGIFactory2_Release(pDXGIFactory);
+            IDXGIFactory1_Release(pDXGIFactory);
         }
     }
 
