@@ -169,7 +169,7 @@ void ff_dxva2_hevc_fill_picture_parameters(const AVCodecContext *avctx, AVDXVACo
     for (i = 0, j = 0; i < FF_ARRAY_ELEMS(pp->RefPicList); i++) {
         const HEVCFrame *frame = NULL;
         while (!frame && j < FF_ARRAY_ELEMS(l->DPB)) {
-            if (&l->DPB[j] != current_picture && (l->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)))
+            if (&l->DPB[j] != current_picture && (l->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)) && !(l->DPB[j].flags & HEVC_FRAME_FLAG_UNAVAILABLE))
                 frame = &l->DPB[j];
             j++;
         }
