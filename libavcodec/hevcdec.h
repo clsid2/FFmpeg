@@ -335,6 +335,11 @@ typedef struct HEVCFrame {
      * A combination of HEVC_FRAME_FLAG_*
      */
     uint8_t flags;
+
+    /**
+     * 1 - a dummy frame generated in place of a missing frame
+     */
+    int missing;
 } HEVCFrame;
 
 typedef struct HEVCLocalContext {
