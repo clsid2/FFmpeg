@@ -166,7 +166,7 @@ static void fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *
     for (i = 0, j = 0; i < FF_ARRAY_ELEMS(pp->RefPicList); i++) {
         const HEVCFrame *frame = NULL;
         while (!frame && j < FF_ARRAY_ELEMS(h->DPB)) {
-            if (&h->DPB[j] != current_picture && (h->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)))
+            if (&h->DPB[j] != current_picture && (h->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)) && !h->DPB[j].missing)
                 frame = &h->DPB[j];
             j++;
         }
