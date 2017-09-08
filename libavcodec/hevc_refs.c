@@ -50,6 +50,8 @@ void ff_hevc_unref_frame(HEVCFrame *frame, int flags)
         frame->refPicList = NULL;
 
         ff_refstruct_unref(&frame->hwaccel_picture_private);
+
+        frame->missing = 0;
     }
 }
 
@@ -440,6 +442,7 @@ static HEVCFrame *generate_missing_ref(HEVCContext *s, int poc)
     frame->poc      = poc;
     frame->sequence = HEVC_SEQUENCE_COUNTER_INVALID;
     frame->flags    = 0;
+    frame->missing  = 1;
 
     if (s->threads_type == FF_THREAD_FRAME)
         ff_thread_report_progress(&frame->tf, INT_MAX, 0);
