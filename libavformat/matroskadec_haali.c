@@ -939,7 +939,7 @@ static void mkv_process_attachments(AVFormatContext *s, MatroskaSegment *segment
       st->codecpar->codec_id = AV_CODEC_ID_NONE;
       st->codecpar->codec_type = AVMEDIA_TYPE_ATTACHMENT;
 
-      st->codecpar->extradata = (uint8_t *)av_malloc((size_t)attach->Length + FF_INPUT_BUFFER_PADDING_SIZE);
+      st->codecpar->extradata = (uint8_t *)av_malloc((size_t)attach->Length + AV_INPUT_BUFFER_PADDING_SIZE);
       if(st->codecpar->extradata == NULL)
         break;
       st->codecpar->extradata_size = (int)attach->Length;
@@ -970,7 +970,7 @@ static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCo
     Create the "atom size", "tag", and "tag version" fields the
     decoder expects manually. */
     extradata_size = 12 + info->CodecPrivateSize;
-    extradata = av_mallocz(extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    extradata = av_mallocz(extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
     if (extradata == NULL)
       return AVERROR(ENOMEM);
     AV_WB32(extradata, extradata_size);
@@ -980,7 +980,7 @@ static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCo
   } else if (codec_id == AV_CODEC_ID_AAC && !info->CodecPrivateSize) {
     int profile = matroska_aac_profile(info->CodecID);
     int sri = matroska_aac_sri(mkv_TruncFloat(info->AV.Audio.SamplingFreq));
-    extradata = (uint8_t *)av_malloc(5 + FF_INPUT_BUFFER_PADDING_SIZE);
+    extradata = (uint8_t *)av_malloc(5 + AV_INPUT_BUFFER_PADDING_SIZE);
     if (extradata == NULL)
       return AVERROR(ENOMEM);
     extradata[0] = (profile << 3) | ((sri&0x0E) >> 1);
@@ -995,7 +995,7 @@ static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCo
       extradata_size = 2;
   } else if (codec_id == AV_CODEC_ID_TTA) {
     extradata_size = 30;
-    extradata = (uint8_t *)av_mallocz(extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    extradata = (uint8_t *)av_mallocz(extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
     if (extradata == NULL)
       return AVERROR(ENOMEM);
     ffio_init_context(&b, extradata, extradata_size, 1, NULL, NULL, NULL, NULL);
@@ -1018,7 +1018,7 @@ static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCo
     *extradata_len = extradata_size;
   } else if(info->CodecPrivate && info->CodecPrivateSize > 0){
     extradata_size = info->CodecPrivateSize - extradata_offset;
-    *extradata_ptr = (uint8_t *)av_mallocz(extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    *extradata_ptr = (uint8_t *)av_mallocz(extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
     if(*extradata_ptr == NULL)
       return AVERROR(ENOMEM);
 
@@ -1777,19 +1777,19 @@ again:
     av_packet_from_data(pkt, wv_data, wv_size);
   } else if (track->stream->codecpar->codec_id == AV_CODEC_ID_DVB_SUBTITLE && pkt->size >= 2 && AV_RB16(pkt->data) != 0x2000) {
     int dvbsize = pkt->size + 2;
-    uint8_t *dvbdata = av_malloc(dvbsize + FF_INPUT_BUFFER_PADDING_SIZE);
+    uint8_t *dvbdata = av_malloc(dvbsize + AV_INPUT_BUFFER_PADDING_SIZE);
     AV_WB16(dvbdata, 0x2000);
     memcpy(dvbdata+2, pkt->data, pkt->size);
-    memset(dvbdata+dvbsize, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+    memset(dvbdata+dvbsize, 0, AV_INPUT_BUFFER_PADDING_SIZE);
     av_buffer_unref(&pkt->buf);
     av_packet_from_data(pkt, dvbdata, dvbsize);
   } else if (!strcmp(track->info->CodecID, "V_PRORES")) {
     size = pkt->size + 8;
-    uint8_t *buf = av_malloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
+    uint8_t *buf = av_malloc(size + AV_INPUT_BUFFER_PADDING_SIZE);
     AV_WB32(buf, pkt->size);
     AV_WB32(buf + 4, MKBETAG('i', 'c', 'p', 'f'));
     memcpy(buf + 8, pkt->data, pkt->size);
-    memset(buf+size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+    memset(buf+size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
     av_buffer_unref(&pkt->buf);
     av_packet_from_data(pkt, buf, size);
   }
