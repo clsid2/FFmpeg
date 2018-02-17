@@ -64,7 +64,7 @@ void ff_hwaccel_uninit(AVCodecContext *avctx);
 #define HWACCEL_DXVA2(codec) \
     HW_CONFIG_HWACCEL(1, 1, 1, DXVA2_VLD,    DXVA2,        ff_ ## codec ## _dxva2_hwaccel)
 #define HWACCEL_D3D11VA2(codec) \
-    HW_CONFIG_HWACCEL(1, 1, 0, D3D11,        D3D11VA,      ff_ ## codec ## _d3d11va2_hwaccel)
+    HW_CONFIG_HWACCEL(1, 1, 1, D3D11,        D3D11VA,      ff_ ## codec ## _d3d11va2_hwaccel)
 #define HWACCEL_NVDEC(codec) \
     HW_CONFIG_HWACCEL(1, 1, 0, CUDA,         CUDA,         ff_ ## codec ## _nvdec_hwaccel)
 #define HWACCEL_VAAPI(codec) \
