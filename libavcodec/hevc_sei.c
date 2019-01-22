@@ -25,6 +25,7 @@
 #include "golomb.h"
 #include "hevc_ps.h"
 #include "hevc_sei.h"
+#include "libavutil/hdr_dynamic_metadata.h"
 
 static int decode_nal_sei_decoded_picture_hash(HEVCSEIPictureHash *s, GetBitContext *gb)
 {
@@ -206,10 +207,181 @@ static int decode_registered_user_data_closed_caption(HEVCSEIA53Caption *s, GetB
     return 0;
 }
 
-static int decode_nal_sei_user_data_registered_itu_t_t35(HEVCSEI *s, GetBitContext *gb,
+static int decode_registered_user_data_dynamic_hdr_plus(AVDynamicHDRPlus *s, GetBitContext *gb,
+                                                        void *logctx, int size)
+{
+    const int luminance_den = 10000;
+    const int peak_luminance_den = 15;
+    const int rgb_den = 100000;
+    const int fraction_pixel_den = 1000;
+    const int knee_point_den = 4095;
+    const int bezier_anchor_den = 1023;
+    const int saturation_weight_den = 8;
+
+    int w, i, j;
+
+    if (get_bits_left(gb) < 2)
+        return AVERROR_INVALIDDATA;
+    s->num_windows = get_bits(gb, 2);
+    if (s->num_windows < 1 || s->num_windows > 3) {
+        av_log(logctx, AV_LOG_ERROR, "num_windows=%d, must be in [1, 3]\n",
+               s->num_windows);
+        return AVERROR_INVALIDDATA;
+    }
+
+    if (get_bits_left(gb) < ((19 * 8 + 1) * (s->num_windows - 1)))
+        return AVERROR_INVALIDDATA;
+
+    for (w = 1; w < s->num_windows; w++) {
+        s->params[w].window_upper_left_corner_x.num = get_bits(gb, 16);
+        s->params[w].window_upper_left_corner_y.num = get_bits(gb, 16);
+        s->params[w].window_lower_right_corner_x.num = get_bits(gb, 16);
+        s->params[w].window_lower_right_corner_y.num = get_bits(gb, 16);
+        // The corners are set to absolute coordinates here. They should be
+        // converted to the relative coordinates (in [0, 1]) in the decoder.
+        s->params[w].window_upper_left_corner_x.den = 1;
+        s->params[w].window_upper_left_corner_y.den = 1;
+        s->params[w].window_lower_right_corner_x.den = 1;
+        s->params[w].window_lower_right_corner_y.den = 1;
+
+        s->params[w].center_of_ellipse_x = get_bits(gb, 16);
+        s->params[w].center_of_ellipse_y = get_bits(gb, 16);
+        s->params[w].rotation_angle = get_bits(gb, 8);
+        s->params[w].semimajor_axis_internal_ellipse = get_bits(gb, 16);
+        s->params[w].semimajor_axis_external_ellipse = get_bits(gb, 16);
+        s->params[w].semiminor_axis_external_ellipse = get_bits(gb, 16);
+        s->params[w].overlap_process_option = get_bits(gb, 1);
+    }
+
+    if (get_bits_left(gb) < 28)
+        return AVERROR(EINVAL);
+
+    s->targeted_system_display_maximum_luminance.num = get_bits(gb, 27);
+    s->targeted_system_display_maximum_luminance.den = luminance_den;
+    s->targeted_system_display_actual_peak_luminance_flag = get_bits(gb, 1);
+
+    if (s->targeted_system_display_actual_peak_luminance_flag) {
+        int rows, cols;
+        if (get_bits_left(gb) < 10)
+            return AVERROR(EINVAL);
+        rows = get_bits(gb, 5);
+        cols = get_bits(gb, 5);
+        if (((rows < 2) || (rows > 25)) || ((cols < 2) || (cols > 25))) {
+            av_log(logctx, AV_LOG_ERROR, "num_rows=%d, num_cols=%d, they must [2, 25] for targeted_system_display_actual_peak_luminance\n", rows, cols);
+            return AVERROR_INVALIDDATA;
+        }
+        s->num_rows_targeted_system_display_actual_peak_luminance = rows;
+        s->num_cols_targeted_system_display_actual_peak_luminance = cols;
+
+        if (get_bits_left(gb) < (rows * cols * 4))
+            return AVERROR(EINVAL);
+
+        for (i = 0; i < rows; i++) {
+            for (j = 0; j < cols; j++) {
+                s->targeted_system_display_actual_peak_luminance[i][j].num = get_bits(gb, 4);
+                s->targeted_system_display_actual_peak_luminance[i][j].den = peak_luminance_den;
+            }
+        }
+    }
+    for (w = 0; w < s->num_windows; w++) {
+        if (get_bits_left(gb) < (3 * 17 + 17 + 4))
+            return AVERROR(EINVAL);
+        for (i = 0; i < 3; i++) {
+            s->params[w].maxscl[i].num = get_bits(gb, 17);
+            s->params[w].maxscl[i].den = rgb_den;
+        }
+        s->params[w].average_maxrgb.num = get_bits(gb, 17);
+        s->params[w].average_maxrgb.den = rgb_den;
+        s->params[w].num_distribution_maxrgb_percentiles = get_bits(gb, 4);
+
+        if (get_bits_left(gb) <
+            (s->params[w].num_distribution_maxrgb_percentiles * 24))
+            return AVERROR(EINVAL);
+        for (i = 0; i < s->params[w].num_distribution_maxrgb_percentiles; i++) {
+            s->params[w].distribution_maxrgb[i].percentage = get_bits(gb, 7);
+            s->params[w].distribution_maxrgb[i].percentile.num = get_bits(gb, 17);
+            s->params[w].distribution_maxrgb[i].percentile.den = rgb_den;
+        }
+
+        if (get_bits_left(gb) < 10)
+            return AVERROR(EINVAL);
+        s->params[w].fraction_bright_pixels.num = get_bits(gb, 10);
+        s->params[w].fraction_bright_pixels.den = fraction_pixel_den;
+    }
+    if (get_bits_left(gb) < 1)
+        return AVERROR(EINVAL);
+    s->mastering_display_actual_peak_luminance_flag = get_bits(gb, 1);
+    if (s->mastering_display_actual_peak_luminance_flag) {
+        int rows, cols;
+        if (get_bits_left(gb) < 10)
+            return AVERROR(EINVAL);
+        rows = get_bits(gb, 5);
+        cols = get_bits(gb, 5);
+        if (((rows < 2) || (rows > 25)) || ((cols < 2) || (cols > 25))) {
+            av_log(logctx, AV_LOG_ERROR, "num_rows=%d, num_cols=%d, they must be in [2, 25] for mastering_display_actual_peak_luminance\n", rows, cols);
+            return AVERROR_INVALIDDATA;
+        }
+        s->num_rows_mastering_display_actual_peak_luminance = rows;
+        s->num_cols_mastering_display_actual_peak_luminance = cols;
+
+        if (get_bits_left(gb) < (rows * cols * 4))
+            return AVERROR(EINVAL);
+
+        for (i = 0; i < rows; i++) {
+            for (j = 0; j < cols; j++) {
+                s->mastering_display_actual_peak_luminance[i][j].num = get_bits(gb, 4);
+                s->mastering_display_actual_peak_luminance[i][j].den = peak_luminance_den;
+            }
+        }
+    }
+
+    for (w = 0; w < s->num_windows; w++) {
+        if (get_bits_left(gb) < 1)
+            return AVERROR(EINVAL);
+
+        s->params[w].tone_mapping_flag = get_bits(gb, 1);
+        if (s->params[w].tone_mapping_flag) {
+            if (get_bits_left(gb) < 28)
+                return AVERROR(EINVAL);
+            s->params[w].knee_point_x.num = get_bits(gb, 12);
+            s->params[w].knee_point_x.den = knee_point_den;
+            s->params[w].knee_point_y.num = get_bits(gb, 12);
+            s->params[w].knee_point_y.den = knee_point_den;
+            s->params[w].num_bezier_curve_anchors = get_bits(gb, 4);
+
+            if (get_bits_left(gb) < (s->params[w].num_bezier_curve_anchors * 10))
+                return AVERROR(EINVAL);
+
+            for (i = 0; i < s->params[w].num_bezier_curve_anchors; i++) {
+                s->params[w].bezier_curve_anchors[i].num = get_bits(gb, 10);
+                s->params[w].bezier_curve_anchors[i].den = bezier_anchor_den;
+            }
+        }
+
+        if (get_bits_left(gb) < 1)
+            return AVERROR(EINVAL);
+
+        s->params[w].color_saturation_mapping_flag = get_bits(gb, 1);
+        if (s->params[w].color_saturation_mapping_flag) {
+            if (get_bits_left(gb) < 6)
+                return AVERROR(EINVAL);
+            s->params[w].color_saturation_weight.num = get_bits(gb, 6);
+            s->params[w].color_saturation_weight.den = saturation_weight_den;
+        }
+    }
+
+    skip_bits(gb, get_bits_left(gb));
+
+    return 0;
+}
+
+static int decode_nal_sei_user_data_registered_itu_t_t35(HEVCSEI *s,
+                                                         GetBitContext *gb,
+                                                         void *logctx,
                                                          int size)
 {
-    uint32_t country_code;
+    uint8_t country_code;
+    uint16_t provider_code;
     uint32_t user_identifier;
 
     if (size < 7)
@@ -222,10 +394,38 @@ static int decode_nal_sei_user_data_registered_itu_t_t35(HEVCSEI *s, GetBitConte
         size--;
     }
 
-    skip_bits(gb, 8);
-    skip_bits(gb, 8);
-
+    provider_code = get_bits(gb, 16);
     user_identifier = get_bits_long(gb, 32);
+
+    // Check for dynamic metadata - HDR10+(SMPTE 2094-40).
+    if ((provider_code == 0x003C) &&
+        ((user_identifier & 0xFFFFFF00) == 0x00010400)) {
+        int err;
+        size_t size;
+        AVDynamicHDRPlus *hdr_plus = av_dynamic_hdr_plus_alloc(&size);
+        if (!hdr_plus)
+            return AVERROR(ENOMEM);
+
+        if (s->dynamic_hdr_plus.info)
+            av_buffer_unref(&s->dynamic_hdr_plus.info);
+
+        s->dynamic_hdr_plus.info =
+            av_buffer_create((uint8_t*)hdr_plus, size,
+                             av_buffer_default_free, NULL, 0);
+        if (!s->dynamic_hdr_plus.info) {
+            av_freep(&hdr_plus);
+            return AVERROR(ENOMEM);
+        }
+
+        hdr_plus->itu_t_t35_country_code = country_code;
+        hdr_plus->application_version = (uint8_t)((user_identifier & 0x000000FF));
+
+        err = decode_registered_user_data_dynamic_hdr_plus(hdr_plus, gb, logctx, size);
+        if (err < 0)
+            av_buffer_unref(&s->dynamic_hdr_plus.info);
+
+        return err;
+    }
 
     switch (user_identifier) {
         case MKBETAG('G', 'A', '9', '4'):
@@ -292,7 +492,7 @@ static int decode_nal_sei_prefix(GetBitContext *gb, void *logctx, HEVCSEI *s,
     case HEVC_SEI_TYPE_ACTIVE_PARAMETER_SETS:
         return decode_nal_sei_active_parameter_sets(s, gb, logctx);
     case HEVC_SEI_TYPE_USER_DATA_REGISTERED_ITU_T_T35:
-        return decode_nal_sei_user_data_registered_itu_t_t35(s, gb, size);
+        return decode_nal_sei_user_data_registered_itu_t_t35(s, gb, logctx, size);
     case HEVC_SEI_TYPE_ALTERNATIVE_TRANSFER_CHARACTERISTICS:
         return decode_nal_sei_alternative_transfer(&s->alternative_transfer, gb);
     default:
@@ -365,4 +565,5 @@ void ff_hevc_reset_sei(HEVCSEI *s)
 {
     s->a53_caption.a53_caption_size = 0;
     av_freep(&s->a53_caption.a53_caption);
+    av_buffer_unref(&s->dynamic_hdr_plus.info);
 }
