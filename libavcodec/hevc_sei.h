@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 
+#include "libavutil/buffer.h"
 #include "get_bits.h"
 
 /**
@@ -104,6 +105,10 @@ typedef struct HEVCSEIMasteringDisplay {
     uint32_t min_luminance;
 } HEVCSEIMasteringDisplay;
 
+typedef struct HEVCSEIDynamicHDRPlus{
+    AVBufferRef *info;
+} HEVCSEIDynamicHDRPlus;
+
 typedef struct HEVCSEIContentLight {
     int present;
     uint16_t max_content_light_level;
@@ -139,6 +144,7 @@ typedef struct HEVCSEI {
     HEVCSEIPictureHash picture_hash;
     HEVCSEIFramePacking frame_packing;
     HEVCSEIDisplayOrientation display_orientation;
+    HEVCSEIDynamicHDRPlus dynamic_hdr_plus;
     HEVCSEIPictureTiming picture_timing;
     HEVCSEIA53Caption a53_caption;
     HEVCSEIUnregistered unregistered;
