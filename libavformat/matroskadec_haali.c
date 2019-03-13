@@ -1007,6 +1007,8 @@ static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCo
     avio_wl32(&b, av_rescale(s->duration, info->AV.Audio.OutputSamplingFreq, AV_TIME_BASE));
   } else if (codec_id == AV_CODEC_ID_WAVPACK) {
     return 0;
+  } else if (codec_id == AV_CODEC_ID_AV1) {
+    extradata_offset = 4;
   }
 
   if (*extradata_ptr)
