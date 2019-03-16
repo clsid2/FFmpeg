@@ -1545,7 +1545,8 @@ static int mkv_packet_timeline_update(AVFormatContext *s, longlong *start_time, 
   if (!(flags & (FRAME_UNKNOWN_START|FRAME_EOF))) {
     *start_time -= ctx->timeline[ctx->timeline_position].offset;
 
-    if (*end_time > ctx->timeline[ctx->timeline_position].chapter->End)
+    // limit the end-time if we're seeking to another segment. If eg. a subtitle frame stretches over the segment boundary on a fluid transition, then just let it pass
+    if (*end_time > ctx->timeline[ctx->timeline_position].chapter->End && ctx->timeline_position < (ctx->num_timeline-1) && ctx->timeline[ctx->timeline_position + 1].need_seek)
       *end_time = ctx->timeline[ctx->timeline_position].chapter->End;
     *end_time -= ctx->timeline[ctx->timeline_position].offset;
   }
