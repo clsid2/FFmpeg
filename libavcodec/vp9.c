@@ -1348,9 +1348,6 @@ static int decode_tiles(AVCodecContext *avctx,
                         decode_sb_mem(td, row, col, lflvl_ptr,
                                       yoff2, uvoff2, BL_64X64);
                     } else {
-                        if (vpx_rac_is_end(td->c)) {
-                            return AVERROR_INVALIDDATA;
-                        }
                         decode_sb(td, row, col, lflvl_ptr,
                                   yoff2, uvoff2, BL_64X64);
                     }
