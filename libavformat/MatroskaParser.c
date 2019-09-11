@@ -2346,6 +2346,7 @@ static void parseBlockGroup(MatroskaFile *mf,ulonglong toplen,ulonglong timecode
   unsigned        nframes = 0,i;
   unsigned        *sizes;
   signed short        block_timecode;
+  jmp_buf        jb;
 
   if (blockex)
     goto blockex;
@@ -2440,6 +2441,16 @@ found:
           break;
       }
 
+      // we need to free the packet in case of errors here
+      memcpy(&jb, &mf->jb, sizeof(jb));
+      if (setjmp(mf->jb)) {
+          QFree(mf, qe);
+
+          // jump to the top level handler
+          memcpy(&mf->jb, &jb, sizeof(jb));
+          longjmp(mf->jb, 1);
+      }
+
       v = filepos(mf);
       qf = NULL;
       for (i=0;i<nframes;++i) {
@@ -2464,6 +2475,8 @@ found:
 
         v += sizes[i];
       }
+
+      memcpy(&mf->jb, &jb, sizeof(jb));
 
       // we want to still load these bytes into cache
       for (v = filepos(mf) & ~0x3fff; v < len + dpos; v += 0x4000)
