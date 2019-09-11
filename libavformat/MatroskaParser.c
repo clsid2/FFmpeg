@@ -3282,6 +3282,8 @@ void              mkv_Close(MatroskaFile *mf) {
   if (mf==NULL)
     return;
 
+  EmptyQueues(mf);
+
   for (i=0;i<mf->nTracks;++i)
     mf->cache->memfree(mf->cache,mf->Tracks[i]);
   mf->cache->memfree(mf->cache,mf->Tracks);
