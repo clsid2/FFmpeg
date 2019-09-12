@@ -515,11 +515,12 @@ static struct QueueEntry  *QAlloc(MatroskaFile *mf) {
       errorjmp(mf,"Ouf of memory");
 
     qe = *qep;
-    qe->Data = NULL;
-
-    for (i=0;i<QSEGSIZE-1;++i)
+    for (i=0;i<QSEGSIZE-1;++i) {
       qe[i].next = qe+i+1;
+      qe[i].Data = NULL;
+    }
     qe[QSEGSIZE-1].next = NULL;
+    qe[QSEGSIZE-1].Data = NULL;
 
     mf->QFreeList = qe;
   }
@@ -2346,7 +2347,6 @@ static void parseBlockGroup(MatroskaFile *mf,ulonglong toplen,ulonglong timecode
   unsigned        nframes = 0,i;
   unsigned        *sizes;
   signed short        block_timecode;
-  jmp_buf        jb;
 
   if (blockex)
     goto blockex;
@@ -2441,16 +2441,6 @@ found:
           break;
       }
 
-      // we need to free the packet in case of errors here
-      memcpy(&jb, &mf->jb, sizeof(jb));
-      if (setjmp(mf->jb)) {
-          QFree(mf, qe);
-
-          // jump to the top level handler
-          memcpy(&mf->jb, &jb, sizeof(jb));
-          longjmp(mf->jb, 1);
-      }
-
       v = filepos(mf);
       qf = NULL;
       for (i=0;i<nframes;++i) {
@@ -2475,8 +2465,6 @@ found:
 
         v += sizes[i];
       }
-
-      memcpy(&mf->jb, &jb, sizeof(jb));
 
       // we want to still load these bytes into cache
       for (v = filepos(mf) & ~0x3fff; v < len + dpos; v += 0x4000)
@@ -3282,14 +3270,13 @@ void              mkv_Close(MatroskaFile *mf) {
   if (mf==NULL)
     return;
 
-  EmptyQueues(mf);
-
   for (i=0;i<mf->nTracks;++i)
     mf->cache->memfree(mf->cache,mf->Tracks[i]);
   mf->cache->memfree(mf->cache,mf->Tracks);
 
   for (i=0;i<mf->nQBlocks;++i) {
-    mf->cache->memfree(mf->cache,mf->QBlocks[i]->Data);
+    for (j=0;j<QSEGSIZE;j++)
+      mf->cache->memfree(mf->cache, mf->QBlocks[i][j].Data);
     mf->cache->memfree(mf->cache,mf->QBlocks[i]);
   }
   mf->cache->memfree(mf->cache,mf->QBlocks);
