@@ -54,6 +54,21 @@
 
 static const char *matroska_doctypes[] = { "matroska", "webm" };
 
+static const CodecMime mkv_mime_tags[] = {
+    {"text/plain"                 , AV_CODEC_ID_TEXT},
+    {"application/x-truetype-font", AV_CODEC_ID_TTF},
+    {"application/x-font"         , AV_CODEC_ID_TTF},
+    {"font/ttf"                   , AV_CODEC_ID_TTF},
+    {"font/sfnt"                  , AV_CODEC_ID_TTF},
+    {"font/collection"            , AV_CODEC_ID_TTF},
+    {"application/font-sfnt"      , AV_CODEC_ID_TTF},
+    {"application/vnd.ms-opentype", AV_CODEC_ID_OTF},
+    {"font/otf"                   , AV_CODEC_ID_OTF},
+    {"binary"                     , AV_CODEC_ID_BIN_DATA},
+
+    {""                           , AV_CODEC_ID_NONE}
+};
+
 typedef struct AVIOStream {
   InputStream base;
   AVIOContext *pb;
@@ -945,9 +960,9 @@ static void mkv_process_attachments(AVFormatContext *s, MatroskaSegment *segment
       st->codecpar->extradata_size = (int)attach->Length;
       aviostream_read(segment->iostream, attach->Position, st->codecpar->extradata, st->codecpar->extradata_size);
 
-      for (i=0; ff_mkv_mime_tags[i].id != AV_CODEC_ID_NONE; i++) {
-        if (!strncmp(ff_mkv_mime_tags[i].str, attach->MimeType, strlen(ff_mkv_mime_tags[i].str))) {
-          st->codecpar->codec_id = ff_mkv_mime_tags[i].id;
+      for (i=0; mkv_mime_tags[i].id != AV_CODEC_ID_NONE; i++) {
+        if (!strncmp(mkv_mime_tags[i].str, attach->MimeType, strlen(mkv_mime_tags[i].str))) {
+          st->codecpar->codec_id = mkv_mime_tags[i].id;
           break;
         }
       }
