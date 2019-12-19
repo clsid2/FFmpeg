@@ -192,6 +192,8 @@ struct TrackInfo {
   char			*Name;
   char			Language[4];
   char			*CodecID;
+
+  unsigned int NeedKeyframes;
 };
 
 typedef struct TrackInfo  TrackInfo;

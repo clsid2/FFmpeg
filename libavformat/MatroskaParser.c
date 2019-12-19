@@ -1670,6 +1670,12 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
     cslen = 0;
   }
 
+  // work-around some broken files
+  if (t.Type == TT_AUDIO && strcmp(t.CodecID, "A_TRUEHD"))
+      t.NeedKeyframes = 1;
+  else if (!strcmp(t.CodecID, "V_MJPEG"))
+      t.NeedKeyframes = 1;
+
   // allocate new track
   tpp = AGET(mf,Tracks);
 
@@ -2533,6 +2539,10 @@ out:
     }
     qf->DiscardPadding = discard;
   }
+
+  // work-around for broken files which don't flag eg. audio as keyframes
+  if (ref && mf->Tracks[tracknum]->NeedKeyframes)
+      ref = 0;
 
   if (ref)
     while (qf) {
