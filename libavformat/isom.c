@@ -665,6 +665,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
            for MPEG-1 Audio or MPEG-2 Audio; MPEG-2 AAC excluded. */
         if (object_type_id == 0x69 || object_type_id == 0x6b)
             return 0;
+        if (!len)
+            return 0;
         if (!len || (uint64_t)len > (1<<30))
             return AVERROR_INVALIDDATA;
         if ((ret = ff_get_extradata(fc, st->codecpar, pb, len)) < 0)
