@@ -35,6 +35,8 @@
 #include <string.h>
 #include <setjmp.h>
 
+#include "libavutil/common.h"
+
 #if defined(_WIN32) && defined(_MSC_VER)
 // MS names some functions differently
 #define        alloca          _alloca
@@ -201,6 +203,7 @@ struct MatroskaFile {
   // Cues
   unsigned int            nCues,nCuesSize;
   struct Cue            *Cues;
+  unsigned char          CueBestType;
 
   // Attachments
   unsigned int            nAttachments,nAttachmentsSize;
@@ -1737,12 +1740,22 @@ static void fixupCues(MatroskaFile *mf) {
   // adjust cues, shift cues if file does not start at 0
   unsigned  i;
   longlong  adjust = mf->firstTimecode * mf->Seg.TimecodeScale;
+  unsigned char nBestType = -1;
+
 
   for (i=0;i<mf->nCues;++i) {
     mf->Cues[i].Time *= mf->Seg.TimecodeScale;
     mf->Cues[i].Time -= adjust;
     mf->Cues[i].Duration *= mf->Seg.TimecodeScale;
+
+
+    for (int n = 0; n < mf->nTracks; ++n) {
+        if (mf->Tracks[n]->Number == mf->Cues[i].Track)
+            nBestType = mf->Tracks[n]->Type;
+    }
   }
+
+  mf->CueBestType = nBestType;
 }
 
 static void parseCues(MatroskaFile *mf,ulonglong toplen) {
@@ -3432,7 +3445,7 @@ static inline int CueSuitableForSeeking(MatroskaFile *mf, int nCue) {
       nTrack = n;
   }
 
-  if (nTrack >= 0 && nTrack < mf->nTracks && mf->Tracks[nTrack]->Type > nBestTrackType)
+  if (nTrack >= 0 && nTrack < mf->nTracks && mf->Tracks[nTrack]->Type > FFMAX(mf->CueBestType, nBestTrackType))
     return 0;
 
   return 1;
