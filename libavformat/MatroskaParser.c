@@ -1500,7 +1500,10 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
       STRGETA(mf,t.Name,len);
       break;
     case 0x22b59c: // Language
-      readLangCC(mf, len, t.Language);
+      STRGETA(mf, t.Language, len);
+      break;
+    case 0x22B59D:
+      STRGETA(mf, t.LanguageIETF, len);
       break;
     case 0x86: // CodecID
       STRGETA(mf,t.CodecID,len);
@@ -1685,8 +1688,12 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
   // copy strings
   if (t.Name)
     cpadd += strlen(t.Name)+1;
+  if (t.Language)
+      cpadd += strlen(t.Language) + 1;
+  if (t.LanguageIETF)
+      cpadd += strlen(t.LanguageIETF) + 1;
   if (t.CodecID)
-    cpadd += strlen(t.CodecID)+1;
+      cpadd += strlen(t.CodecID) + 1;
 
   tp = mf->cache->memalloc(mf->cache,sizeof(*tp) + cplen + cslen + cpadd);
   if (tp == NULL)
@@ -1708,12 +1715,16 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
 
   cp = (char*)(tp+1) + cplen + cslen;
   CopyStr(&tp->Name,&cp);
+  CopyStr(&tp->Language, &cp);
+  CopyStr(&tp->LanguageIETF, &cp);
   CopyStr(&tp->CodecID,&cp);
 
   // set default language
+  // adipose: not needed as matraskadec will default empty to english--remove as it works only with static array
+  /*
   if (!tp->Language[0])
     memcpy(tp->Language, "eng", 4);
-
+  */
   *tpp = tp;
 }
 

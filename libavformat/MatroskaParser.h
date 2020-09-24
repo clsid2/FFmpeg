@@ -190,7 +190,8 @@ struct TrackInfo {
 
   /* various strings */
   char			*Name;
-  char			Language[4];
+  char			*Language;
+  char			*LanguageIETF;
   char			*CodecID;
 
   unsigned int NeedKeyframes;
