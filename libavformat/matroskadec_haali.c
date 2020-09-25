@@ -877,7 +877,12 @@ static void matroska_convert_tag(AVFormatContext *s, Tag *tag,
     int i;
 
     for (i = 0; i < tag->nSimpleTags; i++) {
-        const char *lang = (tags[i].Language[0] && strcmp(tags[i].Language, "und")) ? tags[i].Language : NULL;
+        const char* lang;
+        if (tags[i].LanguageIETF) {
+            lang = (tags[i].LanguageIETF && strcmp(tags[i].LanguageIETF, "und")) ? tags[i].LanguageIETF : NULL;
+        } else {
+            lang = (tags[i].Language && strcmp(tags[i].Language, "und")) ? tags[i].Language : NULL;
+        }
 
         if (!tags[i].Name) {
             av_log(s, AV_LOG_WARNING, "Skipping invalid tag with no TagName.\n");
@@ -1354,10 +1359,26 @@ static int mkv_read_header(AVFormatContext *s)
     /* refresh codec id, if changed above */
     st->codecpar->codec_id = codec_id;
 
-    if (strlen(info->Language) == 0) /* default english language if none is set */
+    char* langTag = info->Language;
+    char* langType;
+    langType = "ISO 639-2"; //default for Matroska 1-3, allowed in 4
+    if (NULL != info->LanguageIETF) {
+      langTag = info->LanguageIETF; //takes precedence--see https://tools.ietf.org/id/draft-ietf-cellar-matroska-04.html 9.3.4.1.18
+      langType = "BCP 47";
+    } else if (NULL != langTag) {
+      for (int i = 0; i < strlen(langTag); i++) {
+        if ('-' == langTag[i]) {
+          langTag[i] = 0; //LAVUtils doesn't understand 639-2 + country code, so we return just the lang part
+          break;
+        }
+      }
+    }
+    if (NULL == langTag || strlen(langTag) == 0) /* default english language if none is set */
       av_dict_set(&st->metadata, "language", "eng", 0);
-    else if (strcmp(info->Language, "und"))
-      av_dict_set(&st->metadata, "language", info->Language, 0);
+    else if (NULL != langTag && strcmp(langTag, "und")) {
+      av_dict_set(&st->metadata, "language", langTag, 0);
+      av_dict_set(&st->metadata, "langType", langType, 0);
+    }
     av_dict_set(&st->metadata, "title", info->Name, 0);
 
     av_dict_set(&st->metadata, "mkv-codec-id", info->CodecID, 0);
