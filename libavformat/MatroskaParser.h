@@ -230,7 +230,8 @@ typedef struct Attachment Attachment;
 
 struct ChapterDisplay {
   char			*String;
-  char			Language[4];
+  char			*Language;
+  char			*LanguageIETF;
   char			Country[4];
 };
 
@@ -297,7 +298,8 @@ struct Target {
 struct SimpleTag {
   char		    *Name;
   char		    *Value;
-  char		    Language[4];
+  char		    *Language;
+  char		    *LanguageIETF;
   unsigned	    Default:1;
 };
 

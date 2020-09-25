@@ -1986,8 +1986,15 @@ static void parseChapter(MatroskaFile *mf,ulonglong toplen,struct Chapter *paren
             disp = ASGET(mf,ch,Display);
             memset(disp, 0, sizeof(*disp));
           }
-          readLangCC(mf, len, disp->Language);
+          STRGETM(mf, disp->Language, len);
           break;
+        case 0x437d: // ChapterLanguageIETF
+            if (disp == NULL) {
+                disp = ASGET(mf, ch, Display);
+                memset(disp, 0, sizeof(*disp));
+            }
+            STRGETM(mf, disp->LanguageIETF, len);
+            break;
         case 0x437e: // ChapterCountry
           if (disp==NULL) {
             disp = ASGET(mf,ch,Display);
@@ -2156,7 +2163,16 @@ static void parseTags(MatroskaFile *mf,ulonglong toplen) {
                 STRGETM(mf,st->Value,len);
               break;
             case 0x447a: // TagLanguage
-              readLangCC(mf, len, st->Language);
+              if (st->Language)
+                skipbytes(mf,len);
+              else
+                STRGETM(mf, st->Language, len);
+              break;
+            case 0x447b: // TagLanguageIETF
+              if (st->LanguageIETF)
+                skipbytes(mf,len);
+              else
+                STRGETM(mf, st->LanguageIETF, len);
               break;
             case 0x4484: // TagDefault
               st->Default = readUInt(mf,(unsigned)len)!=0;
@@ -2166,6 +2182,8 @@ static void parseTags(MatroskaFile *mf,ulonglong toplen) {
           if (!st->Name || !st->Value) {
             mf->cache->memfree(mf->cache,st->Name);
             mf->cache->memfree(mf->cache,st->Value);
+            mf->cache->memfree(mf->cache, st->Language);
+            mf->cache->memfree(mf->cache, st->LanguageIETF);
             --tag->nSimpleTags;
           }
           break;

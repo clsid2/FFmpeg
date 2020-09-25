@@ -877,7 +877,12 @@ static void matroska_convert_tag(AVFormatContext *s, Tag *tag,
     int i;
 
     for (i = 0; i < tag->nSimpleTags; i++) {
-        const char *lang = (tags[i].Language[0] && strcmp(tags[i].Language, "und")) ? tags[i].Language : NULL;
+        const char* lang;
+        if (tags[i].LanguageIETF) {
+            lang = (tags[i].LanguageIETF && strcmp(tags[i].LanguageIETF, "und")) ? tags[i].LanguageIETF : NULL;
+        } else {
+            lang = (tags[i].Language && strcmp(tags[i].Language, "und")) ? tags[i].Language : NULL;
+        }
 
         if (!tags[i].Name) {
             av_log(s, AV_LOG_WARNING, "Skipping invalid tag with no TagName.\n");
