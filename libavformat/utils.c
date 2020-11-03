@@ -5885,3 +5885,9 @@ FF_DISABLE_DEPRECATION_WARNINGS
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 }
+
+AVIndexEntry* av_lav_get_index_entries(AVStream *st, int *nb_index_entries)
+{
+    *nb_index_entries = st->internal->nb_index_entries;
+    return st->internal->index_entries;
+}
