@@ -239,7 +239,7 @@ static AVIOStream *aviostream_create(AVIOContext *pb)
 }
 
 /* Taken vanilla from ffmpeg */
-static int mkv_probe(AVProbeData *p)
+static int mkv_probe(const AVProbeData *p)
 {
   uint64_t total = 0;
   int len_mask = 0x80, size = 1, n = 1, i;
@@ -437,7 +437,7 @@ static void mkv_find_segments(AVFormatContext *s)
   struct _wfinddata_t finddata;
   wchar_t wfilespec[4096];
 
-  filename = av_strdup(s->filename);
+  filename = av_strdup(s->url);
   file = av_basename(filename);
   path = av_dirname(filename);
   filespec = av_asprintf("%s/*.mk?", path);
@@ -678,9 +678,9 @@ static void mkv_build_index(AVFormatContext *s)
 
   /* free old index */
   for (u = 0; u < s->nb_streams; u++) {
-    av_freep(&s->streams[u]->index_entries);
-    s->streams[u]->index_entries_allocated_size = 0;
-    s->streams[u]->nb_index_entries = 0;
+    av_freep(&s->streams[u]->internal->index_entries);
+    s->streams[u]->internal->index_entries_allocated_size = 0;
+    s->streams[u]->internal->nb_index_entries = 0;
   }
   /* convert Cue entries into av index entries */
   if (ctx->virtual_timeline) {
@@ -1317,9 +1317,8 @@ static int mkv_read_header(AVFormatContext *s)
         codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
       }
       if (codec_id == AV_CODEC_ID_NONE) {
-        char buf[32];
-        av_get_codec_tag_string(buf, sizeof(buf), fourcc);
-        av_log(s, AV_LOG_ERROR, "mov FourCC not found %s.\n", buf);
+        char buf[AV_FOURCC_MAX_STRING_SIZE];
+        av_log(s, AV_LOG_ERROR, "mov FourCC not found %s.\n", av_fourcc_make_string(buf, fourcc));
       }
       if (info->CodecPrivateSize >= 86) {
         bit_depth = AV_RB16((uint8_t *)info->CodecPrivate + 82);
@@ -1802,8 +1801,9 @@ again:
     av_buffer_unref(&pkt->buf);
     av_packet_from_data(pkt, dvbdata, dvbsize);
   } else if (!strcmp(track->info->CodecID, "V_PRORES")) {
+    uint8_t *buf;
     size = pkt->size + 8;
-    uint8_t *buf = av_malloc(size + AV_INPUT_BUFFER_PADDING_SIZE);
+    buf = av_malloc(size + AV_INPUT_BUFFER_PADDING_SIZE);
     AV_WB32(buf, pkt->size);
     AV_WB32(buf + 4, MKBETAG('i', 'c', 'p', 'f'));
     memcpy(buf + 8, pkt->data, pkt->size);
