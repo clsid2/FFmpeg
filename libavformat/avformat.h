@@ -3011,4 +3011,6 @@ AVRational av_stream_get_codec_timebase(const AVStream *st);
  * @}
  */
 
+AVIndexEntry* av_lav_get_index_entries(AVStream *st, int *nb_index_entries);
+
 #endif /* AVFORMAT_AVFORMAT_H */
