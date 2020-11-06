@@ -28,6 +28,10 @@
 #include "dxva2_internal.h"
 #include "av1dec.h"
 
+#if !HAVE_DXVA_PICPARAMS_AV1
+#include "compat/windows/dxva_av1.h"
+#endif
+
 #define MAX_TILES 256
 
 struct AV1DXVAContext {
