@@ -1424,8 +1424,11 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
   size_t            cplen = 0, cslen = 0, cpadd = 0;
   unsigned            CompScope, num_comp = 0;
 
-  if (mf->nTracks >= MAX_TRACKS)
-    errorjmp(mf,"Too many tracks.");
+  if (mf->nTracks >= MAX_TRACKS) {
+    //errorjmp(mf,"Too many tracks.");
+    skipbytes(mf, toplen);
+    return;
+  }
 
   // clear track info
   memset(&t,0,sizeof(t));
