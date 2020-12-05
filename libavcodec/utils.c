@@ -672,8 +672,8 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
         !(codec->capabilities & AV_CODEC_CAP_CHANNEL_CONF) &&
         avctx->channels == 0) {
         av_log(avctx, AV_LOG_ERROR, "Decoder requires channel count but channels not set\n");
-        ret = AVERROR(EINVAL);
-        goto free_and_end;
+        /* ret = AVERROR(EINVAL);
+        goto free_and_end; */
     }
 
     if (avctx->sample_rate < 0) {
