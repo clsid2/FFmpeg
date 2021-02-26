@@ -2460,6 +2460,10 @@ static int hls_read_seek(AVFormatContext *s, int stream_index,
     duration = s->duration == AV_NOPTS_VALUE ?
                0 : s->duration;
 
+    /* bound seeking to the beginning of the stream */
+    if (seek_timestamp < first_timestamp)
+        seek_timestamp = first_timestamp;
+
     if (0 < duration && duration < seek_timestamp - first_timestamp)
         return AVERROR(EIO);
 
