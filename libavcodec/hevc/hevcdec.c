@@ -30,6 +30,7 @@
 #include "libavutil/common.h"
 #include "libavutil/container_fifo.h"
 #include "libavutil/film_grain_params.h"
+#include "libavutil/hdr_dynamic_metadata.h"
 #include "libavutil/internal.h"
 #include "libavutil/md5.h"
 #include "libavutil/mem.h"
@@ -3133,7 +3134,30 @@ static int set_side_data(HEVCContext *s)
     }
 
     if (s->sei.common.itut_t35.hdr_plus) {
-        AVBufferRef *info_ref = av_buffer_ref(s->sei.common.itut_t35.hdr_plus);
+        AVBufferRef *info_ref;
+        AVDynamicHDRPlus *metadata = (AVDynamicHDRPlus*)s->sei.common.itut_t35.hdr_plus->data;
+
+        // fill in window 0 (full frame) and convert to relative coordinates
+        if (metadata->params[0].window_lower_right_corner_x.num == 0)
+        {
+            // ensure the buffer is writable
+            av_buffer_make_writable(&s->sei.common.itut_t35.hdr_plus);
+            metadata = (AVDynamicHDRPlus*)s->sei.common.itut_t35.hdr_plus->data;
+
+            // Convert coordinates to relative coordinate in [0, 1].
+            metadata->params[0].window_upper_left_corner_x.num  = 0;
+            metadata->params[0].window_upper_left_corner_y.num  = 0;
+            metadata->params[0].window_lower_right_corner_x.num = out->width - 1;
+            metadata->params[0].window_lower_right_corner_y.num = out->height - 1;
+            for (int w = 0; w < metadata->num_windows; w++) {
+                metadata->params[w].window_upper_left_corner_x.den = out->width - 1;
+                metadata->params[w].window_upper_left_corner_y.den = out->height - 1;
+                metadata->params[w].window_lower_right_corner_x.den = out->width - 1;
+                metadata->params[w].window_lower_right_corner_y.den = out->height - 1;
+            }
+        }
+
+        info_ref = av_buffer_ref(s->sei.common.itut_t35.hdr_plus);
         if (!info_ref)
             return AVERROR(ENOMEM);
 
