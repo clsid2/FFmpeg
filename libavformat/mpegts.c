@@ -1862,7 +1862,7 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
                     sti->need_context_update = 1;
                 }
                 if (st->codecpar->codec_id == AV_CODEC_ID_MPEG4SYSTEMS)
-                    mpegts_open_section_filter(ts, pid, m4sl_cb, ts, 1);
+                    mpegts_open_section_filter(ts, pid, m4sl_cb, ts, 0);
             }
         break;
     case FMC_DESCRIPTOR:
@@ -2592,7 +2592,7 @@ static void pat_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
                     mpegts_close_filter(ts, ts->pids[pmt_pid]);
 
             if (!ts->pids[pmt_pid])
-                mpegts_open_section_filter(ts, pmt_pid, pmt_cb, ts, 1);
+                mpegts_open_section_filter(ts, pmt_pid, pmt_cb, ts, 0);
             prg = add_program(ts, sid);
             if (prg) {
                 unsigned prg_idx = prg - ts->prg;
@@ -3128,9 +3128,9 @@ static int mpegts_read_header(AVFormatContext *s)
         /* first do a scan to get all the services */
         seek_back(s, pb, pos);
 
-        mpegts_open_section_filter(ts, SDT_PID, sdt_cb, ts, 1);
-        mpegts_open_section_filter(ts, PAT_PID, pat_cb, ts, 1);
-        mpegts_open_section_filter(ts, EIT_PID, eit_cb, ts, 1);
+        mpegts_open_section_filter(ts, SDT_PID, sdt_cb, ts, 0);
+        mpegts_open_section_filter(ts, PAT_PID, pat_cb, ts, 0);
+        mpegts_open_section_filter(ts, EIT_PID, eit_cb, ts, 0);
 
         handle_packets(ts, probesize / ts->raw_packet_size);
         /* if could not find service, enable auto_guess */
@@ -3390,9 +3390,9 @@ MpegTSContext *avpriv_mpegts_parse_open(AVFormatContext *s)
     ts->stream = s;
     ts->auto_guess = 1;
 
-    mpegts_open_section_filter(ts, SDT_PID, sdt_cb, ts, 1);
-    mpegts_open_section_filter(ts, PAT_PID, pat_cb, ts, 1);
-    mpegts_open_section_filter(ts, EIT_PID, eit_cb, ts, 1);
+    mpegts_open_section_filter(ts, SDT_PID, sdt_cb, ts, 0);
+    mpegts_open_section_filter(ts, PAT_PID, pat_cb, ts, 0);
+    mpegts_open_section_filter(ts, EIT_PID, eit_cb, ts, 0);
 
     return ts;
 }
