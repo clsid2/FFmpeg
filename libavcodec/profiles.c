@@ -83,6 +83,7 @@ const AVProfile ff_h264_profiles[] = {
     { AV_PROFILE_H264_CAVLC_444,            "CAVLC 4:4:4"           },
     { AV_PROFILE_H264_MULTIVIEW_HIGH,       "Multiview High"        },
     { AV_PROFILE_H264_STEREO_HIGH,          "Stereo High"           },
+    { FF_PROFILE_H264_MULTIVIEW_HIGH_DEPTH, "Multiview High Depth"  },
     { AV_PROFILE_UNKNOWN },
 };
 
