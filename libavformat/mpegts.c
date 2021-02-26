@@ -815,7 +815,7 @@ static const StreamType ISO_types[] = {
 #endif
     { 0x1b, AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_H264       },
     { 0x1c, AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_AAC        },
-    { 0x20, AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_H264       },
+    { 0x20, AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_H264_MVC   },
     { 0x21, AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_JPEG2000   },
     { 0x24, AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_HEVC       },
     { 0x33, AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_VVC        },
