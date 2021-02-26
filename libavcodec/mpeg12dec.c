@@ -774,9 +774,6 @@ static av_cold int mpeg_decode_init(AVCodecContext *avctx)
     s2->slice_ctx_size = sizeof(s->slice);
     s2->out_format = FMT_MPEG1;
 
-    if (   avctx->codec_tag != AV_RL32("VCR2")
-        && avctx->codec_tag != AV_RL32("BW10"))
-        avctx->coded_width = avctx->coded_height = 0; // do not trust dimensions from input
     ret = ff_mpv_decode_init(s2, avctx);
     if (ret < 0)
         return ret;
