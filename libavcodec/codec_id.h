@@ -309,6 +309,8 @@ enum AVCodecID {
     AV_CODEC_ID_SGA_VIDEO,
     AV_CODEC_ID_GEM,
 
+    AV_CODEC_ID_H264_MVC,
+
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
     AV_CODEC_ID_PCM_S16LE = 0x10000,
