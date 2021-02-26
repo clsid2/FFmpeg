@@ -2989,6 +2989,10 @@ static int hls_read_seek(AVFormatContext *s, int stream_index,
     duration = s->duration == AV_NOPTS_VALUE ?
                0 : s->duration;
 
+    /* bound seeking to the beginning of the stream */
+    if (seek_timestamp < first_timestamp)
+        seek_timestamp = first_timestamp;
+
     /* Only finished playlists cannot grow past the known duration. */
     if (seek_pls->finished &&
         0 < duration && duration < seek_timestamp - first_timestamp)
