@@ -1961,6 +1961,14 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 
+    {
+        .id        = AV_CODEC_ID_H264_MVC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "h264_mvc",
+        .long_name = NULL_IF_CONFIG_SMALL("H264 MVC"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+
     /* various PCM "codecs" */
     {
         .id        = AV_CODEC_ID_PCM_S16LE,
