@@ -1051,9 +1051,6 @@ static av_cold int mpeg_decode_init(AVCodecContext *avctx)
     Mpeg1Context *s    = avctx->priv_data;
     MpegEncContext *s2 = &s->mpeg_enc_ctx;
 
-    if (   avctx->codec_tag != AV_RL32("VCR2")
-        && avctx->codec_tag != AV_RL32("BW10"))
-        avctx->coded_width = avctx->coded_height = 0; // do not trust dimensions from input
     ff_mpv_decode_init(s2, avctx);
 
     /* we need some permutation to store matrices,
