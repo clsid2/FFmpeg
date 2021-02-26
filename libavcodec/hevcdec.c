@@ -3814,7 +3814,8 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
         if (avctx->extradata_size > 0 && avctx->extradata) {
             ret = hevc_decode_extradata(s, avctx->extradata, avctx->extradata_size, 1);
             if (ret < 0) {
-                return ret;
+                s->is_nalff = 0;
+                av_log(avctx, AV_LOG_ERROR, "Invalid extradata ignored\n");
             }
         }
     }
