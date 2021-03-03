@@ -2881,7 +2881,7 @@ static void fixupChapter(ulonglong adj, struct Chapter *ch) {
 
 static longlong        findLastTimecode(MatroskaFile *mf) {
   ulonglong   nd = 0;
-  unsigned    n,vtrack,retry=0;
+  unsigned    n,vtrack,vtrackid,retry=0,cueoffset=0;
 
   if (mf->nTracks == 0)
     return -1;
@@ -2889,6 +2889,7 @@ static longlong        findLastTimecode(MatroskaFile *mf) {
   for (n=vtrack=0;n<mf->nTracks;++n)
     if (mf->Tracks[n]->Type == TT_VIDEO) {
       vtrack = n;
+      vtrackid = mf->Tracks[n]->Number;
       goto ok;
     }
 
@@ -2907,11 +2908,17 @@ ok:
       if (retry > 0 && (mf->pCluster + (MAXDURATIONREAD << retry) > mf->pSegmentTop) && (mf->pCluster + (MAXDURATIONREAD << (retry - 1)) > mf->pSegmentTop))
         break;
     } else {
-      if (retry >= mf->nCues)
+      if ((retry + cueoffset) >= mf->nCues)
         break;
 
-      mf->readPosition = mf->Cues[mf->nCues - (1 + retry)].Position + mf->pSegment;
-      mf->tcCluster = mf->Cues[mf->nCues - (1 + retry)].Time / mf->Seg.TimecodeScale;
+      struct Cue *pCue = &mf->Cues[mf->nCues - (1 + retry + cueoffset)];
+      while ((retry + cueoffset) < (mf->nCues - 1) && pCue->Track != vtrackid) {
+          cueoffset++;
+          pCue = &mf->Cues[mf->nCues - (1 + retry + cueoffset)];
+      }
+
+      mf->readPosition = pCue->Position + mf->pSegment;
+      mf->tcCluster = pCue->Time / mf->Seg.TimecodeScale;
     }
 
     do
