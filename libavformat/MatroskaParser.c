@@ -1272,6 +1272,30 @@ static void parseVideoColourInfo(MatroskaFile *mf,ulonglong toplen,struct TrackI
   ENDFOR(mf);
 }
 
+static void parseProjection(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *ti) {
+  FOREACH(mf,toplen)
+    case 0x7671: // Projection Type
+      ti->AV.Video.Projection.ProjectionType = readUInt(mf, (unsigned)len);
+      break;
+    case 0x7672: // Projection Private
+      if (len<=20) // 20-bytes
+      {
+        readbytes(mf,ti->AV.Video.Projection.ProjectionPrivate,(int)len);
+        ti->AV.Video.Projection.ProjectionPrivateSize = len;
+      }
+      break;
+    case 0x7673: // ProjectionPoseYaw
+      ti->AV.Video.Projection.ProjectionPoseYaw = readFloat(mf,(unsigned)len);
+      break;
+    case 0x7674: // ProjectionPosePitch
+      ti->AV.Video.Projection.ProjectionPosePitch = readFloat(mf,(unsigned)len);
+      break;
+    case 0x7675: // ProjectionPoseRoll
+      ti->AV.Video.Projection.ProjectionPoseRoll = readFloat(mf,(unsigned)len);
+      break;
+  ENDFOR(mf);
+}
+
 static void parseVideoInfo(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *ti) {
   ulonglong v;
   char            dW = 0, dH = 0;
@@ -1356,6 +1380,9 @@ static void parseVideoInfo(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *t
       break;
     case 0x55b0: // Colour
       parseVideoColourInfo(mf,len,ti);
+      break;
+    case 0x7670: // Projection
+      parseProjection(mf,len,ti);
       break;
   ENDFOR(mf);
 

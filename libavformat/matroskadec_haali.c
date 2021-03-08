@@ -1181,6 +1181,113 @@ static int mkv_parse_video_color(AVStream *st, TrackInfo *info)
     return 0;
 }
 
+static int mkv_process_projection(AVStream *st, TrackInfo *info, void *logctx)
+{
+    AVSphericalMapping *spherical;
+    const uint8_t *priv_data = info->AV.Video.Projection.ProjectionPrivate;
+    enum AVSphericalProjection projection;
+    size_t spherical_size;
+    uint32_t l = 0, t = 0, r = 0, b = 0;
+    uint32_t padding = 0;
+    int ret;
+
+    if (info->AV.Video.Projection.ProjectionPrivateSize && priv_data[0] != 0) {
+        av_log(logctx, AV_LOG_WARNING, "Unknown spherical metadata\n");
+        return 0;
+    }
+
+    switch (info->AV.Video.Projection.ProjectionType) {
+    case MATROSKA_VIDEO_PROJECTION_TYPE_EQUIRECTANGULAR:
+        if (info->AV.Video.Projection.ProjectionPrivateSize == 20) {
+            t = AV_RB32(priv_data +  4);
+            b = AV_RB32(priv_data +  8);
+            l = AV_RB32(priv_data + 12);
+            r = AV_RB32(priv_data + 16);
+
+            if (b >= UINT_MAX - t || r >= UINT_MAX - l) {
+                av_log(logctx, AV_LOG_ERROR,
+                       "Invalid bounding rectangle coordinates "
+                       "%"PRIu32",%"PRIu32",%"PRIu32",%"PRIu32"\n",
+                       l, t, r, b);
+                return AVERROR_INVALIDDATA;
+            }
+        } else if (info->AV.Video.Projection.ProjectionPrivateSize != 0) {
+            av_log(logctx, AV_LOG_ERROR, "Unknown spherical metadata\n");
+            return AVERROR_INVALIDDATA;
+        }
+        if (l || t || r || b)
+            projection = AV_SPHERICAL_EQUIRECTANGULAR_TILE;
+        else
+            projection = AV_SPHERICAL_EQUIRECTANGULAR;
+        break;
+    case MATROSKA_VIDEO_PROJECTION_TYPE_CUBEMAP:
+        if (info->AV.Video.Projection.ProjectionPrivateSize < 4) {
+            av_log(logctx, AV_LOG_ERROR, "Missing projection private properties\n");
+            return AVERROR_INVALIDDATA;
+        } else if (info->AV.Video.Projection.ProjectionPrivateSize == 12) {
+            uint32_t layout = AV_RB32(priv_data + 4);
+            if (layout) {
+                av_log(logctx, AV_LOG_WARNING,
+                       "Unknown spherical cubemap layout %"PRIu32"\n", layout);
+                return 0;
+            }
+            projection = AV_SPHERICAL_CUBEMAP;
+            padding = AV_RB32(priv_data + 8);
+        } else {
+            av_log(logctx, AV_LOG_ERROR, "Unknown spherical metadata\n");
+            return AVERROR_INVALIDDATA;
+        }
+        break;
+    case MATROSKA_VIDEO_PROJECTION_TYPE_RECTANGULAR:
+        /* No Spherical metadata, but video rotation can be encoded here */
+        {
+            int rotation = (int32_t)roundf(info->AV.Video.Projection.ProjectionPoseRoll);
+
+            /* normalize rotation values */
+            while (rotation < 0)
+                rotation += 360;
+
+            while (rotation >= 360)
+                rotation -= 360;
+
+            if (rotation != 0)
+                av_dict_set_int(&st->metadata, "rotate", rotation, 0);
+        }
+        return 0;
+    default:
+        av_log(logctx, AV_LOG_WARNING,
+               "Unknown spherical metadata type %u\n",
+               info->AV.Video.Projection.ProjectionType);
+        return 0;
+    }
+
+    spherical = av_spherical_alloc(&spherical_size);
+    if (!spherical)
+        return AVERROR(ENOMEM);
+
+    spherical->projection = projection;
+
+    spherical->yaw   = (int32_t) (info->AV.Video.Projection.ProjectionPoseYaw   * (1 << 16));
+    spherical->pitch = (int32_t) (info->AV.Video.Projection.ProjectionPosePitch * (1 << 16));
+    spherical->roll  = (int32_t) (info->AV.Video.Projection.ProjectionPoseRoll  * (1 << 16));
+
+    spherical->padding = padding;
+
+    spherical->bound_left   = l;
+    spherical->bound_top    = t;
+    spherical->bound_right  = r;
+    spherical->bound_bottom = b;
+
+    ret = av_stream_add_side_data(st, AV_PKT_DATA_SPHERICAL, (uint8_t *)spherical,
+                                  spherical_size);
+    if (ret < 0) {
+        av_freep(&spherical);
+        return ret;
+    }
+
+    return 0;
+}
+
 static int mkv_read_header(AVFormatContext *s)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
@@ -1404,6 +1511,9 @@ static int mkv_read_header(AVFormatContext *s)
       ret = mkv_parse_video_color(st, info);
       if (ret < 0)
           return ret;
+
+      mkv_process_projection(st, info, s);
+
       // if we have virtual track, mark the real tracks
       /*for (j=0; j < track->operation.combine_planes.nb_elem; j++) {
         char buf[32];
