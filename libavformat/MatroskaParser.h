@@ -178,6 +178,15 @@ struct TrackInfo {
           } MasteringMetadata;
       } Colour;
 
+      struct {
+        unsigned int ProjectionType;
+        char ProjectionPrivate[20];
+        unsigned ProjectionPrivateSize;
+        MKFLOAT ProjectionPoseYaw;
+        MKFLOAT ProjectionPosePitch;
+        MKFLOAT ProjectionPoseRoll;
+      } Projection;
+
       unsigned int  Interlaced:1;
     } Video;
     struct {
