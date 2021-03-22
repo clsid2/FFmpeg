@@ -58,16 +58,12 @@ const CodecTags ff_mkv_codec_tags[]={
     {"A_VORBIS"         , AV_CODEC_ID_VORBIS},
     {"A_WAVPACK4"       , AV_CODEC_ID_WAVPACK},
 
-    {"D_WEBVTT/SUBTITLES"   , AV_CODEC_ID_WEBVTT},
-    {"D_WEBVTT/CAPTIONS"    , AV_CODEC_ID_WEBVTT},
-    {"D_WEBVTT/DESCRIPTIONS", AV_CODEC_ID_WEBVTT},
-    {"D_WEBVTT/METADATA"    , AV_CODEC_ID_WEBVTT},
-
     {"S_TEXT/UTF8"      , AV_CODEC_ID_SUBRIP},
     {"S_TEXT/UTF8"      , AV_CODEC_ID_TEXT},
     {"S_TEXT/ASCII"     , AV_CODEC_ID_TEXT},
     {"S_TEXT/ASS"       , AV_CODEC_ID_ASS},
     {"S_TEXT/SSA"       , AV_CODEC_ID_ASS},
+    {"S_TEXT/WEBVTT"    , AV_CODEC_ID_WEBVTT},
     {"S_ASS"            , AV_CODEC_ID_ASS},
     {"S_SSA"            , AV_CODEC_ID_ASS},
     {"S_VOBSUB"         , AV_CODEC_ID_DVD_SUBTITLE},
@@ -75,6 +71,11 @@ const CodecTags ff_mkv_codec_tags[]={
     {"S_HDMV/PGS"       , AV_CODEC_ID_HDMV_PGS_SUBTITLE},
     {"S_HDMV/TEXTST"    , AV_CODEC_ID_HDMV_TEXT_SUBTITLE},
     {"S_ARIBSUB"        , AV_CODEC_ID_ARIB_CAPTION},
+
+    {"D_WEBVTT/SUBTITLES"   , AV_CODEC_ID_WEBVTT},
+    {"D_WEBVTT/CAPTIONS"    , AV_CODEC_ID_WEBVTT},
+    {"D_WEBVTT/DESCRIPTIONS", AV_CODEC_ID_WEBVTT},
+    {"D_WEBVTT/METADATA"    , AV_CODEC_ID_WEBVTT},
 
     {"V_AV1"            , AV_CODEC_ID_AV1},
     {"V_AVS2"           , AV_CODEC_ID_AVS2},
