@@ -128,6 +128,10 @@ struct QueueEntry {
   longlong             DiscardPadding;
 
   unsigned int         flags;
+
+  unsigned int         AdditionalID;
+  unsigned int         DataAdditionalLength;
+  char                *DataAdditional;
 };
 
 struct Queue {
@@ -521,9 +525,11 @@ static struct QueueEntry  *QAlloc(MatroskaFile *mf) {
     for (i=0;i<QSEGSIZE-1;++i) {
       qe[i].next = qe+i+1;
       qe[i].Data = NULL;
+      qe[i].DataAdditional = NULL;
     }
     qe[QSEGSIZE-1].next = NULL;
     qe[QSEGSIZE-1].Data = NULL;
+    qe[QSEGSIZE-1].DataAdditional = NULL;
 
     mf->QFreeList = qe;
   }
@@ -537,6 +543,8 @@ static struct QueueEntry  *QAlloc(MatroskaFile *mf) {
 static inline void QFree(MatroskaFile *mf,struct QueueEntry *qe) {
   mf->cache->memfree(mf->cache, qe->Data);
   qe->Data = NULL;
+  mf->cache->memfree(mf->cache, qe->DataAdditional);
+  qe->DataAdditional = NULL;
   qe->next = mf->QFreeList;
   mf->QFreeList = qe;
 }
@@ -2339,9 +2347,8 @@ static void parseSegment(MatroskaFile *mf,ulonglong toplen) {
   parsePointers(mf);
 }
 
-#if 0
-static void parseBlockAdditions(MatroskaFile *mf, ulonglong toplen, ulonglong timecode, unsigned track) {
-  ulonglong        add_id = 1, add_pos, add_len;
+static void parseBlockAdditions(MatroskaFile *mf, ulonglong toplen, struct QueueEntry *qe) {
+  ulonglong        add_id = 1, add_len;
   unsigned char        have_add;
   void *add_data;
 
@@ -2354,31 +2361,25 @@ static void parseBlockAdditions(MatroskaFile *mf, ulonglong toplen, ulonglong ti
           add_id = readUInt(mf, (unsigned)len);
           break;
         case 0xa5: // BlockAddition
-          add_pos = filepos(mf);
-          add_len = len;
-          add_data = mf->cache->memrealloc(mf->cache,add_data,add_len);
-          readbytes(mf, add_data, len);
+          if (add_data == NULL) {
+            add_len = len;
+            add_data = mf->cache->memrealloc(mf->cache,add_data,add_len);
+            readbytes(mf, add_data, len);
+          } else
+              skipbytes(mf,len);
           ++have_add;
           break;
       ENDFOR(mf);
-      if (have_add == 1 && id > 0 && id < 255) {
-        struct QueueEntry *qe = QAlloc(mf);
-        qe->Start = qe->End = timecode;
-        qe->Position = add_pos;
-        qe->Length = (unsigned)add_len;
-        qe->Data = (char *)add_data;
-        qe->flags = FRAME_UNKNOWN_START | FRAME_UNKNOWN_END |
-          (((unsigned)add_id << FRAME_STREAM_SHIFT) & FRAME_STREAM_MASK);
-        qe->DiscardPadding = 0;
-
-        QPut(&mf->Queues[track],qe);
+      if (have_add == 1 && qe->DataAdditional == NULL) {
+        qe->AdditionalID = add_id;
+        qe->DataAdditional = add_data;
+        qe->DataAdditionalLength = add_len;
       } else if(add_data) {
         mf->cache->memfree(mf->cache,add_data);
       }
       break;
   ENDFOR(mf);
 }
-#endif
 
 static void parseBlockGroup(MatroskaFile *mf,ulonglong toplen,ulonglong timecode, int blockex) {
   ulonglong        v;
@@ -2529,9 +2530,9 @@ found:
       have_duration = 1;
       break;
     case 0x75a1: // BlockAdditions
-      /*if (nframes > 0) // have some frames
-        parseBlockAdditions(mf, len, timecode, tracknum);
-      else*/
+      if (nframes == 1) // have some frames (limited to cases with no lacing)
+        parseBlockAdditions(mf, len, qf);
+      else
         skipbytes(mf, len);
       break;
     case 0x75a2: // DiscardPadding
@@ -2601,6 +2602,8 @@ static void ClearQueue(MatroskaFile *mf,struct Queue *q) {
     qn = qe->next;
     mf->cache->memfree(mf->cache, qe->Data);
     qe->Data = NULL;
+    mf->cache->memfree(mf->cache, qe->DataAdditional);
+    qe->DataAdditional = NULL;
     qe->next = mf->QFreeList;
     mf->QFreeList = qe;
   }
@@ -3763,7 +3766,8 @@ int              mkv_ReadFrame(MatroskaFile *mf,
                             ulonglong mask,unsigned int *track,
                             ulonglong *StartTime,ulonglong *EndTime,
                             ulonglong *FilePos,unsigned int *FrameSize,
-                            char **FrameData,unsigned int *FrameFlags, longlong *FrameDiscard)
+                            char **FrameData,unsigned int *FrameFlags, longlong *FrameDiscard,
+                            unsigned int *FrameAdditionalSize, char **FrameAdditionalData, unsigned int *FrameAdditionalID)
 {
   unsigned int            i,j;
   struct QueueEntry *qe;
@@ -3796,6 +3800,14 @@ int              mkv_ReadFrame(MatroskaFile *mf,
       *FrameData = qe->Data;
       *FrameFlags = qe->flags;
       *FrameDiscard = qe->DiscardPadding;
+
+      if (FrameAdditionalSize && FrameAdditionalData && FrameAdditionalID) {
+        *FrameAdditionalSize = qe->DataAdditionalLength;
+        *FrameAdditionalData = qe->DataAdditional;
+        *FrameAdditionalID = qe->AdditionalID;
+
+        qe->DataAdditional = NULL;
+      }
 
       qe->Data = NULL;
       QFree(mf,qe);
