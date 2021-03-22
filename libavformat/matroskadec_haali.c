@@ -1801,16 +1801,152 @@ fail:
     return ret;
 }
 
+static int matroska_parse_webvtt(MatroskaTrack *track, AVPacket *pkt,
+                                 uint8_t *additional, uint64_t additional_id, int additional_size)
+{
+    uint8_t *id, *settings, *comment, *text, *buf;
+    int id_len = 0, settings_len = 0, comment_len = 0, text_len;
+    uint8_t *p, *q;
+    int webm_style = !strncmp(track->info->CodecID, "D_WEBVTT/", 9);
+
+    if (pkt->size <= 0)
+        return AVERROR_INVALIDDATA;
+
+    p = webm_style ? pkt->data : additional;
+    q = webm_style ? (pkt->data + pkt->size) : (additional + additional_size);
+
+    if (p) {
+        if (webm_style) {
+            id = p;
+            id_len = -1;
+            while (p < q) {
+                if (*p == '\r' || *p == '\n') {
+                    id_len = p - id;
+                    if (*p == '\r')
+                        p++;
+                    break;
+                }
+                p++;
+            }
+
+            if (p >= q || *p != '\n')
+                return AVERROR_INVALIDDATA;
+            p++;
+        }
+
+        settings = p;
+        settings_len = -1;
+        while (p < q) {
+            if (*p == '\r' || *p == '\n') {
+                settings_len = p - settings;
+                if (*p == '\r')
+                    p++;
+                break;
+            }
+            p++;
+        }
+
+        if (p >= q || *p != '\n')
+            return AVERROR_INVALIDDATA;
+        p++;
+
+        if (!webm_style) {
+            id = p;
+            id_len = -1;
+            while (p < q) {
+                if (*p == '\r' || *p == '\n') {
+                    id_len = p - id;
+                    if (*p == '\r')
+                        p++;
+                    break;
+                }
+                p++;
+            }
+
+            if (p >= q || *p != '\n')
+                return AVERROR_INVALIDDATA;
+            p++;
+        }
+
+        if (!webm_style && p < q) {
+            if (q[-1] != '\r' && q[-1] != '\n')
+                return AVERROR_INVALIDDATA;
+
+            comment = p;
+            comment_len = q - p;
+        }
+    }
+
+    if (webm_style) {
+        text = p;
+        text_len = q - p;
+
+        while (text_len > 0) {
+            const int len = text_len - 1;
+            const uint8_t c = p[len];
+            if (c != '\r' && c != '\n')
+                break;
+            text_len = len;
+        }
+    } else {
+        text = pkt->data;
+        text_len = pkt->size;
+    }
+
+
+    if (text_len <= 0)
+        return AVERROR_INVALIDDATA;
+
+    if (id_len > 0) {
+        buf = av_packet_new_side_data(pkt,
+                                      AV_PKT_DATA_WEBVTT_IDENTIFIER,
+                                      id_len);
+        if (!buf) {
+            return AVERROR(ENOMEM);
+        }
+        memcpy(buf, id, id_len);
+    }
+
+    if (settings_len > 0) {
+        buf = av_packet_new_side_data(pkt,
+                                      AV_PKT_DATA_WEBVTT_SETTINGS,
+                                      settings_len);
+        if (!buf) {
+            return AVERROR(ENOMEM);
+        }
+        memcpy(buf, settings, settings_len);
+    }
+
+    /*if (comment_len > 0) {
+        buf = av_packet_new_side_data(pkt,
+                                      AV_PKT_DATA_WEBVTT_COMMENT,
+                                      comment_len);
+        if (!buf) {
+            return AVERROR(ENOMEM);
+        }
+        memcpy(buf, comment, comment_len);
+    }*/
+
+    buf = av_mallocz(text_len + AV_INPUT_BUFFER_PADDING_SIZE);
+    memcpy(buf, text, text_len);
+
+    av_buffer_unref(&pkt->buf);
+    av_packet_from_data(pkt, buf, text_len);
+
+    return 0;
+}
+
 static int mkv_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
 
   int ret;
-  unsigned int size, flags, track_num;
+  unsigned int size, flags, track_num, additional_size, additional_id;
   ulonglong start_time, end_time, pos;
   longlong discard_padding;
   MatroskaTrack *track;
   char *frame_data = NULL;
+  char *additional_data = NULL;
 
   ulonglong mask = 0;
   if (!(s->flags & AVFMT_FLAG_NETWORK)) {
@@ -1822,7 +1958,7 @@ static int mkv_read_packet(AVFormatContext *s, AVPacket *pkt)
   }
 
 again:
-  ret = mkv_ReadFrame(ctx->matroska, mask, &track_num, &start_time, &end_time, &pos, &size, &frame_data, &flags, &discard_padding, NULL, NULL, NULL);
+  ret = mkv_ReadFrame(ctx->matroska, mask, &track_num, &start_time, &end_time, &pos, &size, &frame_data, &flags, &discard_padding, &additional_size, &additional_data, &additional_id);
   if (ctx->virtual_timeline) {
     if (ret < 0)
       ret = mkv_packet_timeline_update(s, 0, 0, FRAME_EOF);
@@ -1830,6 +1966,7 @@ again:
       ret = mkv_packet_timeline_update(s, &start_time, &end_time, flags);
     if (ret < 0) {
       av_freep(&frame_data);
+      av_freep(&additional_data);
       if (ret == AVERROR(EAGAIN))
         goto again;
     }
@@ -1838,12 +1975,15 @@ again:
     const char * mkv_error = mkv_GetLastError(ctx->matroska);
     if (mkv_error)
       av_log(s, AV_LOG_ERROR, "mkv error: %s\n", mkv_GetLastError(ctx->matroska));
+    av_freep(&frame_data);
+    av_freep(&additional_data);
     return AVERROR_EOF;
   }
 
   track = &ctx->tracks[track_num];
   if (track_num >= ctx->num_tracks || !track->stream || track->stream->discard == AVDISCARD_ALL) {
     av_freep(&frame_data);
+    av_freep(&additional_data);
     goto again;
   }
 
@@ -1859,6 +1999,7 @@ again:
       if (ret < 0) {
         av_log(s, AV_LOG_ERROR, "cs_ReadData failed");
         av_freep(&frame_data);
+        av_freep(&additional_data);
         av_packet_unref(pkt);
         return AVERROR(EIO);
       } else if (ret == 0) {
@@ -1898,6 +2039,7 @@ again:
     if (ret < 0) {
         av_log(s, AV_LOG_ERROR, "Error parsing a wavpack block.\n");
         av_packet_unref(pkt);
+        av_freep(&additional_data);
         return ret;
     }
     av_buffer_unref(&pkt->buf);
@@ -1920,7 +2062,18 @@ again:
     memset(buf+size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
     av_buffer_unref(&pkt->buf);
     av_packet_from_data(pkt, buf, size);
+  } else if (track->stream->codecpar->codec_id == AV_CODEC_ID_WEBVTT) {
+      ret = matroska_parse_webvtt(track, pkt, additional_data, additional_id, additional_size);
+      if (ret < 0) {
+        av_log(s, AV_LOG_ERROR, "Error parsing a webvtt block.\n");
+        av_packet_unref(pkt);
+        av_freep(&additional_data);
+        return ret;
+      }
   }
+
+  // done parsing, free data
+  av_freep(&additional_data);
 
   if (track->refresh_extradata) {
     mkv_packet_param_change(s, track->info, track->stream->codecpar->codec_id, pkt);
