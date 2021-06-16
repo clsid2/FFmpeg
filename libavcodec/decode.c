@@ -1788,7 +1788,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     if (avctx->codec_type == AVMEDIA_TYPE_AUDIO && avctx->channels == 0 &&
         !(avctx->codec->capabilities & AV_CODEC_CAP_CHANNEL_CONF)) {
         av_log(avctx, AV_LOG_ERROR, "Decoder requires channel count but channels not set\n");
-        return AVERROR(EINVAL);
+        // return AVERROR(EINVAL);
     }
     if (avctx->codec->max_lowres < avctx->lowres || avctx->lowres < 0) {
         av_log(avctx, AV_LOG_WARNING, "The maximum value for lowres supported by the decoder is %d\n",
