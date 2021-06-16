@@ -252,8 +252,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
         && !(codec->capabilities & AV_CODEC_CAP_CHANNEL_CONF)) {
         av_log(avctx, AV_LOG_ERROR, "%s requires channel layout to be set\n",
                av_codec_is_decoder(codec) ? "Decoder" : "Encoder");
-        ret = AVERROR(EINVAL);
-        goto free_and_end;
+        if (!av_codec_is_decoder(codec)) {
+            ret = AVERROR(EINVAL);
+            goto free_and_end;
+        }
     }
     if (avctx->ch_layout.nb_channels && !av_channel_layout_check(&avctx->ch_layout)) {
         av_log(avctx, AV_LOG_ERROR, "Invalid channel layout\n");
