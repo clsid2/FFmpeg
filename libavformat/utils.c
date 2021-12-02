@@ -615,3 +615,72 @@ int ff_dict_set_timestamp(AVDictionary **dict, const char *key, int64_t timestam
         return AVERROR_EXTERNAL;
     }
 }
+
+enum AVStreamParseType av_lav_stream_parser_get_needed(const AVStream *st)
+{
+    if (!st)
+        return 0;
+    return cffstream(st)->need_parsing;
+}
+
+void av_lav_stream_parser_set_needed(AVStream *st, enum AVStreamParseType needed)
+{
+    if (!st)
+        return;
+    ffstream(st)->need_parsing = needed;
+}
+
+void av_lav_stream_parser_init(AVStream *st)
+{
+    FFStream *sti;
+    if (!st)
+        return;
+
+    sti = ffstream(st);
+    if (sti->parser)
+        return;
+
+    sti->parser = av_parser_init(st->codecpar->codec_id);
+    if (sti->parser)
+    {
+        if (sti->need_parsing == AVSTREAM_PARSE_HEADERS)
+        {
+            sti->parser->flags |= PARSER_FLAG_COMPLETE_FRAMES;
+        }
+        else if (sti->need_parsing == AVSTREAM_PARSE_FULL_ONCE)
+        {
+            sti->parser->flags |= PARSER_FLAG_ONCE;
+        }
+    }
+}
+
+int av_lav_stream_parser_get_flags(const AVStream *st)
+{
+    const FFStream *sti;
+    if (!st)
+        return 0;
+
+    sti = cffstream(st);
+    if (sti->parser)
+        return sti->parser->flags;
+
+    return 0;
+}
+
+void av_lav_stream_parser_update_flags(AVStream *st, int flags)
+{
+    FFStream *sti;
+    if (!st)
+        return;
+
+    sti = ffstream(st);
+    if (sti->parser)
+        sti->parser->flags = flags;
+}
+
+int av_lav_stream_codec_info_nb_frames(const AVStream *st)
+{
+    if (!st)
+        return 0;
+    return cffstream(st)->codec_info_nb_frames;
+}
