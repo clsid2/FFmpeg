@@ -2893,4 +2893,12 @@ AVRational av_stream_get_codec_timebase(const AVStream *st);
  * @}
  */
 
+enum AVStreamParseType av_lav_stream_parser_get_needed(const AVStream *st);
+void av_lav_stream_parser_set_needed(AVStream *st, enum AVStreamParseType needed);
+void av_lav_stream_parser_init(AVStream *st);
+int av_lav_stream_parser_get_flags(const AVStream *st);
+void av_lav_stream_parser_update_flags(AVStream *st, int flags);
+int av_lav_stream_codec_info_nb_frames(const AVStream *st);
+int av_lav_stream_get_timing_info(const AVStream *st, AVRational *tb, int *ticks_per_frame);
+
 #endif /* AVFORMAT_AVFORMAT_H */
