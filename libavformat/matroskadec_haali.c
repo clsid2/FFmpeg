@@ -343,7 +343,7 @@ static void mkv_reopen_segment(AVFormatContext *s, MatroskaSegment *segment)
 
   /* reset packet size */
   segment->iostream->pb->max_packet_size = 0;
-  ffio_set_buf_size(segment->iostream->pb, IO_BUFFER_SIZE * 4);
+  ffio_realloc_buf(segment->iostream->pb, IO_BUFFER_SIZE * 4);
 
   segment->matroska = mkv_OpenEx(&segment->iostream->base, 0, 0, ErrorMessage, sizeof(ErrorMessage));
   if (!segment->matroska) {
@@ -678,9 +678,10 @@ static void mkv_build_index(AVFormatContext *s)
 
   /* free old index */
   for (u = 0; u < s->nb_streams; u++) {
-    av_freep(&s->streams[u]->internal->index_entries);
-    s->streams[u]->internal->index_entries_allocated_size = 0;
-    s->streams[u]->internal->nb_index_entries = 0;
+    FFStream *sti = ffstream(s->streams[u]);
+    av_freep(&sti->index_entries);
+    sti->index_entries_allocated_size = 0;
+    sti->nb_index_entries = 0;
   }
   /* convert Cue entries into av index entries */
   if (ctx->virtual_timeline) {
@@ -1337,6 +1338,7 @@ static int mkv_read_header(AVFormatContext *s)
     TrackInfo *info = mkv_GetTrackInfo(ctx->matroska, i);
     enum AVCodecID codec_id = AV_CODEC_ID_NONE;
     AVStream *st;
+    FFStream *sti;
     uint32_t fourcc = 0;
     AVIOContext b;
     int bit_depth = -1;
@@ -1375,6 +1377,8 @@ static int mkv_read_header(AVFormatContext *s)
     st = track->stream = avformat_new_stream(s, NULL);
     if (st == NULL)
       return AVERROR(ENOMEM);
+
+    sti = ffstream(st);
 
     st->id = info->Number;
     st->start_time = 0;
@@ -1487,7 +1491,7 @@ static int mkv_read_header(AVFormatContext *s)
           1 << 30);
       }
       if (st->codecpar->codec_id != AV_CODEC_ID_H264 && st->codecpar->codec_id != AV_CODEC_ID_HEVC)
-        st->need_parsing = AVSTREAM_PARSE_HEADERS;
+        sti->need_parsing = AVSTREAM_PARSE_HEADERS;
       av_log(s, AV_LOG_DEBUG, "Default Duration: %"PRId64"\n", info->DefaultDuration);
       if (info->DefaultDuration && info->DefaultDuration > 8000000) {
         av_reduce(&st->r_frame_rate.num, &st->r_frame_rate.den,
@@ -1531,9 +1535,9 @@ static int mkv_read_header(AVFormatContext *s)
       st->codecpar->sample_rate = (unsigned int)info->AV.Audio.OutputSamplingFreq;
       st->codecpar->channels = info->AV.Audio.Channels;
       if (st->codecpar->codec_id == AV_CODEC_ID_MP3)
-        st->need_parsing = AVSTREAM_PARSE_FULL;
+        sti->need_parsing = AVSTREAM_PARSE_FULL;
       else if (st->codecpar->codec_id != AV_CODEC_ID_AAC && st->codecpar->codec_id != AV_CODEC_ID_MLP && st->codecpar->codec_id != AV_CODEC_ID_TRUEHD)
-        st->need_parsing = AVSTREAM_PARSE_HEADERS;
+        sti->need_parsing = AVSTREAM_PARSE_HEADERS;
       if (track->info->CodecDelay > 0) {
         st->codecpar->initial_padding = av_rescale_q(track->info->CodecDelay, (AVRational){1, 1000000000}, (AVRational){1, st->codecpar->sample_rate});
       }
