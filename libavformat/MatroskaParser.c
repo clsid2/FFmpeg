@@ -1452,6 +1452,32 @@ static void CopyStr(char **src,char **dst) {
   *dst += l;
 }
 
+static void parseBlockAdditionalMapping(MatroskaFile *mf,ulonglong toplen,struct TrackInfo *ti) {
+  ulonglong   v;
+  struct BlockAdditionMapping ba,*bat;
+
+  memset(&ba, 0, sizeof(ba));
+
+  FOREACH(mf,toplen)
+    case 0x41F0: // BlockAddIDValue
+      ba.ID = readUInt(mf,(unsigned)len);
+      break;
+    case 0x41E7: // BlockAddIDType
+      ba.Type = readUInt(mf,(unsigned)len);
+      break;
+    case 0x41ED: // BlockAddIDExtraData
+      ba.Length = len;
+      STRGETM(mf,ba.Data,len);
+      break;
+  ENDFOR(mf);
+
+  if (!ba.Data)
+      return;
+
+  bat = ASGET(mf,ti,BlockAdditionMappings);
+  memcpy(bat,&ba,sizeof(ba));
+}
+
 static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
   struct TrackInfo  t,*tp,**tpp;
   ulonglong            v;
@@ -1634,6 +1660,9 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
           ENDFOR(mf);
           break;
       ENDFOR(mf);
+      break;
+    case 0x41E4: // BlockAdditionalMapping
+      parseBlockAdditionalMapping(mf,len,&t);
       break;
   ENDFOR(mf);
 
@@ -3333,8 +3362,12 @@ void              mkv_Close(MatroskaFile *mf) {
   if (mf==NULL)
     return;
 
-  for (i=0;i<mf->nTracks;++i)
+  for (i=0;i<mf->nTracks;++i) {
+    for (j=0;j<mf->Tracks[i]->nBlockAdditionMappings;++j)
+        mf->cache->memfree(mf->cache,mf->Tracks[i]->BlockAdditionMappings[j].Data);
+    mf->cache->memfree(mf->cache,mf->Tracks[i]->BlockAdditionMappings);
     mf->cache->memfree(mf->cache,mf->Tracks[i]);
+  }
   mf->cache->memfree(mf->cache,mf->Tracks);
 
   for (i=0;i<mf->nQBlocks;++i) {
