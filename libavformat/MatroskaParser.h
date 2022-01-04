@@ -113,6 +113,13 @@ typedef struct MatroskaFile MatroskaFile;
 #define	TT_AUDIO    2
 #define	TT_SUB	    17
 
+struct BlockAdditionMapping {
+  unsigned int ID;
+  unsigned int Type;
+  unsigned int Length;
+  void *Data;
+};
+
 struct TrackInfo {
   unsigned char	  Number;
   unsigned char	  Type;
@@ -203,6 +210,10 @@ struct TrackInfo {
   char			*CodecID;
 
   unsigned int NeedKeyframes;
+
+  // BlockAdditionMappings
+  unsigned int nBlockAdditionMappings,nBlockAdditionMappingsSize;
+  struct BlockAdditionMapping *BlockAdditionMappings;
 };
 
 typedef struct TrackInfo  TrackInfo;
