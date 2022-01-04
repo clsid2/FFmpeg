@@ -975,7 +975,6 @@ static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCo
 {
   int extradata_offset = 0, extradata_size = 0;
   uint8_t *extradata = NULL;
-  AVIOContext b;
 
   if (!strcmp(info->CodecID, "V_MS/VFW/FOURCC") && info->CodecPrivateSize >= 40 && info->CodecPrivate != NULL) {
     extradata_offset = 40;
@@ -1010,17 +1009,18 @@ static int mkv_generate_extradata(AVFormatContext *s, TrackInfo *info, enum AVCo
     } else
       extradata_size = 2;
   } else if (codec_id == AV_CODEC_ID_TTA) {
+    FFIOContext b;
     extradata_size = 30;
     extradata = (uint8_t *)av_mallocz(extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
     if (extradata == NULL)
       return AVERROR(ENOMEM);
     ffio_init_context(&b, extradata, extradata_size, 1, NULL, NULL, NULL, NULL);
-    avio_write(&b, "TTA1", 4);
-    avio_wl16(&b, 1);
-    avio_wl16(&b, info->AV.Audio.Channels);
-    avio_wl16(&b, info->AV.Audio.BitDepth);
-    avio_wl32(&b, mkv_TruncFloat(info->AV.Audio.OutputSamplingFreq));
-    avio_wl32(&b, av_rescale(s->duration, info->AV.Audio.OutputSamplingFreq, AV_TIME_BASE));
+    avio_write(&b.pub, "TTA1", 4);
+    avio_wl16(&b.pub, 1);
+    avio_wl16(&b.pub, info->AV.Audio.Channels);
+    avio_wl16(&b.pub, info->AV.Audio.BitDepth);
+    avio_wl32(&b.pub, mkv_TruncFloat(info->AV.Audio.OutputSamplingFreq));
+    avio_wl32(&b.pub, av_rescale(s->duration, info->AV.Audio.OutputSamplingFreq, AV_TIME_BASE));
   } else if (codec_id == AV_CODEC_ID_WAVPACK) {
     return 0;
   } else if (codec_id == AV_CODEC_ID_AV1) {
@@ -1340,7 +1340,6 @@ static int mkv_read_header(AVFormatContext *s)
     AVStream *st;
     FFStream *sti;
     uint32_t fourcc = 0;
-    AVIOContext b;
     int bit_depth = -1;
 
     track->info = info;
@@ -1395,8 +1394,9 @@ static int mkv_read_header(AVFormatContext *s)
       fourcc    = AV_RL32((uint8_t *)info->CodecPrivate + 16);
       codec_id = ff_codec_get_id(ff_codec_bmp_tags, fourcc);
     } else if (!strcmp(info->CodecID, "A_MS/ACM") && info->CodecPrivateSize >= 14 && info->CodecPrivate != NULL) {
+      FFIOContext b;
       ffio_init_context(&b, (uint8_t *)info->CodecPrivate, info->CodecPrivateSize, 0, NULL, NULL, NULL, NULL);
-      ret = ff_get_wav_header(s, &b, st->codecpar, info->CodecPrivateSize, 0);
+      ret = ff_get_wav_header(s, &b.pub, st->codecpar, info->CodecPrivateSize, 0);
       if (ret < 0)
         return ret;
       codec_id = st->codecpar->codec_id;
