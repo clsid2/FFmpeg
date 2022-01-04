@@ -30,6 +30,7 @@
 #include "isom.h"
 #include "rm.h"
 #include "matroska.h"
+#include "dovi_isom.h"
 #include "libavcodec/bytestream.h"
 #include "libavcodec/mpeg4audio.h"
 #include "libavutil/intfloat.h"
@@ -1561,6 +1562,20 @@ static int mkv_read_header(AVFormatContext *s)
           }
         }
       }
+    }
+
+    av_log(s, AV_LOG_DEBUG, "BlockAdditionMappings: %d\n", info->nBlockAdditionMappings);
+    for (j = 0; j < info->nBlockAdditionMappings; j++)
+    {
+        struct BlockAdditionMapping *mapping = &info->BlockAdditionMappings[j];
+        av_log(s, AV_LOG_DEBUG, "BlockAdditionMappings[%d]: %d (len: %d)\n", j, mapping->Type, mapping->Length);
+
+        switch (mapping->Type) {
+        case MKBETAG('d','v','c','C'):
+        case MKBETAG('d','v','v','C'):
+            if ((ret = ff_isom_parse_dvcc_dvvc(s, st, mapping->Data, mapping->Length)) < 0)
+                return ret;
+        }
     }
   }
 
