@@ -342,8 +342,8 @@ OBJS-$(CONFIG_MATROSKA_MUXER)            += matroskaenc.o matroska.o \
 OBJS-$(CONFIG_MCA_DEMUXER)               += mca.o
 OBJS-$(CONFIG_MATROSKA_HAALI_DEMUXER)    += matroskadec_haali.o matroska.o \
                                             MatroskaParser.o \
-                                            isom.o rmsipr.o flac_picture.o \
-                                            oggparsevorbis.o vorbiscomment.o
+                                            isom_tags.o rmsipr.o flac_picture.o \
+                                            oggparsevorbis.o vorbiscomment.o dovi_isom.o
 OBJS-$(CONFIG_MCC_DEMUXER)               += mccdec.o subtitles.o
 OBJS-$(CONFIG_MD5_MUXER)                 += hashenc.o
 OBJS-$(CONFIG_MGSTS_DEMUXER)             += mgsts.o
