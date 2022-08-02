@@ -19,12 +19,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "config.h"
+#include "config_components.h"
+
 #include <stdio.h>
 #include "MatroskaParser.h"
 
 #include "avformat.h"
 #include "internal.h"
 #include "avio_internal.h"
+#include "demux.h"
 /* For ff_codec_get_id(). */
 #include "riff.h"
 #include "isom.h"
@@ -38,6 +42,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/dict.h"
 #include "libavutil/mastering_display_metadata.h"
+#include "libavutil/pixdesc.h"
 #if CONFIG_ZLIB
 #include <zlib.h>
 #endif
@@ -295,12 +300,12 @@ static int matroska_aac_profile(char *codec_id)
 
 static int matroska_aac_sri(int samplerate)
 {
-  int sri;
+    int sri;
 
-  for (sri=0; sri<FF_ARRAY_ELEMS(avpriv_mpeg4audio_sample_rates); sri++)
-    if (avpriv_mpeg4audio_sample_rates[sri] == samplerate)
-      break;
-  return sri;
+    for (sri = 0; sri < FF_ARRAY_ELEMS(ff_mpeg4audio_sample_rates); sri++)
+        if (ff_mpeg4audio_sample_rates[sri] == samplerate)
+            break;
+    return sri;
 }
 
 static int mkv_uid_compare(char first[16], char second[16])
@@ -1111,8 +1116,8 @@ static int mkv_parse_video_color(AVStream *st, TrackInfo *info)
         info->AV.Video.Colour.ChromaSitingHorz  < MATROSKA_COLOUR_CHROMASITINGHORZ_NB &&
         info->AV.Video.Colour.ChromaSitingVert  < MATROSKA_COLOUR_CHROMASITINGVERT_NB) {
         st->codecpar->chroma_location =
-            avcodec_chroma_pos_to_enum((info->AV.Video.Colour.ChromaSitingHorz - 1) << 7,
-                                       (info->AV.Video.Colour.ChromaSitingVert - 1) << 7);
+            av_chroma_location_pos_to_enum((info->AV.Video.Colour.ChromaSitingHorz - 1) << 7,
+                                           (info->AV.Video.Colour.ChromaSitingVert - 1) << 7);
         has_colorspace = 1;
     }
 
@@ -1532,7 +1537,13 @@ static int mkv_read_header(AVFormatContext *s)
     } else if (info->Type == TT_AUDIO) {
       st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
       st->codecpar->sample_rate = (unsigned int)info->AV.Audio.OutputSamplingFreq;
-      st->codecpar->channels = info->AV.Audio.Channels;
+
+      // channel layout may be already set by codec private checks above
+      if (!av_channel_layout_check(&st->codecpar->ch_layout)) {
+          st->codecpar->ch_layout.order = AV_CHANNEL_ORDER_UNSPEC;
+          st->codecpar->ch_layout.nb_channels = info->AV.Audio.Channels;
+      }
+
       if (st->codecpar->codec_id == AV_CODEC_ID_MP3)
         sti->need_parsing = AVSTREAM_PARSE_FULL;
       else if (st->codecpar->codec_id != AV_CODEC_ID_AAC && st->codecpar->codec_id != AV_CODEC_ID_MLP && st->codecpar->codec_id != AV_CODEC_ID_TRUEHD)
