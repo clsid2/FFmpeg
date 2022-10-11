@@ -2213,7 +2213,7 @@ static int mkv_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
     cur_dts -= ctx->timeline[ctx->timeline_position].offset;
   }
 
-  avpriv_update_cur_dts(s, ctx->tracks[stream_index].stream, cur_dts);
+  avpriv_update_cur_dts(s, s->streams[stream_index], cur_dts);
 
   return 0;
 }
