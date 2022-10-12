@@ -1713,6 +1713,8 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
 
       ncplen = zs.total_out;
       ncp = mf->cache->memalloc(mf->cache, ncplen);
+      if (ncp == NULL)
+          errorjmp(mf, "Out of memory");
 
       inflateReset(&zs);
 
@@ -2532,6 +2534,8 @@ found:
         qe->Position = v;
         qe->Length = sizes[i];
         qe->Data = (char *)mf->cache->memalloc(mf->cache,qe->Length + 16);
+        if (qe->Data == NULL)
+            errorjmp(mf, "Out of memory");
         readbytes(mf, qe->Data, qe->Length);
         qe->flags = FRAME_UNKNOWN_END | FRAME_KF;
         if (i == nframes-1 && gap)
