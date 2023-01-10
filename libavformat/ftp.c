@@ -30,6 +30,7 @@
 #include "urldecode.h"
 #include "libavutil/opt.h"
 #include "libavutil/bprint.h"
+#include "version.h"
 
 #define CONTROL_BUFFER_SIZE 1024
 #define DIR_BUFFER_SIZE 4096
@@ -544,6 +545,7 @@ static int ftp_features(FTPContext *s)
 {
     static const char *feat_command        = "FEAT\r\n";
     static const char *enable_utf8_command = "OPTS UTF8 ON\r\n";
+    static const char *clnt_command = "CLNT " LIBAVFORMAT_IDENT "\r\n";
     static const int feat_codes[] = {211, 0};
     static const int opts_codes[] = {200, 202, 451, 0};
 
@@ -553,7 +555,13 @@ static int ftp_features(FTPContext *s)
     }
 
     if (ftp_has_feature(s, "UTF8")) {
-        int ret = ftp_send_command(s, enable_utf8_command, opts_codes, NULL);
+        int ret;
+
+        if (ftp_has_feature(s, "CLNT")) {
+            ftp_send_command(s, clnt_command, NULL, NULL);
+        }
+
+        ret = ftp_send_command(s, enable_utf8_command, opts_codes, NULL);
         if (ret == 200 || ret == 202)
             s->utf8 = 1;
     }
