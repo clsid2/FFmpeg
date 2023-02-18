@@ -1710,6 +1710,7 @@ skip:
     if (!err) {
         avctx->sample_rate = s->sample_rate;
         avctx->bit_rate    = s->bit_rate + s->prev_bit_rate;
+        avctx->profile     = s->eac3_extension_type_a == 1 ? FF_PROFILE_EAC3_DDP_ATMOS : FF_PROFILE_UNKNOWN;
     }
 
     for (ch = 0; ch < EAC3_MAX_CHANNELS; ch++)
