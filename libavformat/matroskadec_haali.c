@@ -1293,6 +1293,37 @@ static int mkv_process_projection(AVStream *st, TrackInfo *info, void *logctx)
     return 0;
 }
 
+static int mkv_stereo3d_conv(AVStream *st, MatroskaVideoStereoModeType stereo_mode)
+{
+    static const struct {
+        char type;
+        char flags;
+    } stereo_mode_conv [] = {
+#define STEREO_MODE_CONV(STEREOMODETYPE, STEREO3DTYPE, FLAGS, WDIV, HDIV, WEBM) \
+    [(STEREOMODETYPE)] = { .type = (STEREO3DTYPE), .flags = (FLAGS) },
+#define NOTHING(STEREOMODETYPE, WDIV, HDIV, WEBM)
+        STEREOMODE_STEREO3D_MAPPING(STEREO_MODE_CONV, NOTHING)
+    };
+    AVStereo3D *stereo;
+    int ret;
+
+    stereo = av_stereo3d_alloc();
+    if (!stereo)
+        return AVERROR(ENOMEM);
+
+    stereo->type  = stereo_mode_conv[stereo_mode].type;
+    stereo->flags = stereo_mode_conv[stereo_mode].flags;
+
+    ret = av_stream_add_side_data(st, AV_PKT_DATA_STEREO3D, (uint8_t *)stereo,
+                                  sizeof(*stereo));
+    if (ret < 0) {
+        av_freep(&stereo);
+        return ret;
+    }
+
+    return 0;
+}
+
 static int mkv_read_header(AVFormatContext *s)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
@@ -1511,7 +1542,7 @@ static int mkv_read_header(AVFormatContext *s)
       if (info->AV.Video.StereoMode < MATROSKA_VIDEO_STEREOMODE_TYPE_NB &&
         info->AV.Video.StereoMode != MATROSKA_VIDEO_STEREOMODE_TYPE_MONO &&
         info->AV.Video.StereoMode != 10 && info->AV.Video.StereoMode != 12) {
-        ret = ff_mkv_stereo3d_conv(st, info->AV.Video.StereoMode);
+        ret = mkv_stereo3d_conv(st, info->AV.Video.StereoMode);
         if (ret < 0)
             return ret;
       }
