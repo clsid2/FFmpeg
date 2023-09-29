@@ -2928,10 +2928,12 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
             if (!st->r_frame_rate.num) {
                 const AVCodecDescriptor *desc = sti->codec_desc;
                 AVRational mul = (AVRational){ desc && (desc->props & AV_CODEC_PROP_FIELDS) ? 2 : 1, 1 };
-                AVRational  fr = av_mul_q(avctx->framerate, mul);
+                AVRational time_base = av_inv_q(av_mul_q(avctx->framerate, mul));
 
-                if (fr.num && fr.den && av_cmp_q(st->time_base, av_inv_q(fr)) <= 0) {
-                    st->r_frame_rate = fr;
+                if (   time_base.den * (int64_t) st->time_base.num
+                    <= time_base.num * (uint64_t)mul.num * st->time_base.den) {
+                    av_reduce(&st->r_frame_rate.num, &st->r_frame_rate.den,
+                              time_base.den, (int64_t)time_base.num * mul.num, INT_MAX);
                 } else {
                     st->r_frame_rate.num = st->time_base.den;
                     st->r_frame_rate.den = st->time_base.num;
