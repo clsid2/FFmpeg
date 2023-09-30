@@ -1809,11 +1809,25 @@ int ff_hwaccel_frame_priv_alloc(AVCodecContext *avctx, void **hwaccel_picture_pr
     if (!data)
         return AVERROR(ENOMEM);
 
-    frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
+    if (!avctx->hw_frames_ctx)
+    {
+        if (hwaccel->free_frame_priv)
+        {
+            av_free(data);
+            av_log(avctx, AV_LOG_ERROR,
+               "HWAccels with free_frame_priv set require using a frames_ctx\n");
+            return AVERROR(ENOSYS);
+        }
 
-    ref = av_buffer_create(data, hwaccel->frame_priv_data_size,
-                           hwaccel->free_frame_priv,
-                           frames_ctx->device_ctx, 0);
+        ref = av_buffer_create(data, hwaccel->frame_priv_data_size, NULL, NULL, 0);
+    }
+    else
+    {
+        frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
+        ref = av_buffer_create(data, hwaccel->frame_priv_data_size,
+                               hwaccel->free_frame_priv,
+                               frames_ctx->device_ctx, 0);
+    }
     if (!ref) {
         av_free(data);
         return AVERROR(ENOMEM);
