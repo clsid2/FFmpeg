@@ -84,6 +84,9 @@ typedef struct DCAExssParser {
     int     nmixoutconfigs;         ///< Number of mixing configurations
     int     nmixoutchs[4];          ///< Speaker layout mask for mixer output channels
 
+    int     x_syncword_present;     ///< DTS:X extension syncword detected
+    int     x_imax_syncword_present;///< DTS:X IMAX extension syncword detected
+
     DCAExssAsset   assets[1];    ///< Audio asset descriptors
 } DCAExssParser;
 
