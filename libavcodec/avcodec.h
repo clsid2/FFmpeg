@@ -1618,6 +1618,8 @@ typedef struct AVCodecContext {
 #define FF_PROFILE_DTS_ES             30
 #define FF_PROFILE_DTS_96_24          40
 #define FF_PROFILE_DTS_HD_HRA         50
+#define FF_PROFILE_DTS_HD_HRA_X       51
+#define FF_PROFILE_DTS_HD_HRA_X_IMAX  52
 #define FF_PROFILE_DTS_HD_MA          60
 #define FF_PROFILE_DTS_EXPRESS        70
 #define FF_PROFILE_DTS_HD_MA_X        61

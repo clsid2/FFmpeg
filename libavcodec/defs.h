@@ -87,6 +87,8 @@
 #define AV_PROFILE_DTS_ES             30
 #define AV_PROFILE_DTS_96_24          40
 #define AV_PROFILE_DTS_HD_HRA         50
+#define AV_PROFILE_DTS_HD_HRA_X       51
+#define AV_PROFILE_DTS_HD_HRA_X_IMAX  52
 #define AV_PROFILE_DTS_HD_MA          60
 #define AV_PROFILE_DTS_EXPRESS        70
 #define AV_PROFILE_DTS_HD_MA_X        61
