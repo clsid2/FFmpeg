@@ -40,6 +40,8 @@ const AVProfile ff_dca_profiles[] = {
     { AV_PROFILE_DTS_ES,             "DTS-ES"                 },
     { AV_PROFILE_DTS_96_24,          "DTS 96/24"              },
     { AV_PROFILE_DTS_HD_HRA,         "DTS-HD HRA"             },
+    { AV_PROFILE_DTS_HD_HRA_X,       "DTS-HD HRA + DTS:X"     },
+    { AV_PROFILE_DTS_HD_HRA_X_IMAX,  "DTS-HD HRA + DTS:X IMAX"},
     { AV_PROFILE_DTS_HD_MA,          "DTS-HD MA"              },
     { AV_PROFILE_DTS_HD_MA_X,        "DTS-HD MA + DTS:X"      },
     { AV_PROFILE_DTS_HD_MA_X_IMAX,   "DTS-HD MA + DTS:X IMAX" },
