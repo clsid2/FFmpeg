@@ -296,6 +296,17 @@ static int mov_metadata_hmmt(MOVContext *c, AVIOContext *pb, unsigned len)
     return 0;
 }
 
+static void mov_set_metadata(MOVContext *c, const char *key, const char *str)
+{
+    if (c->trak_index >= 0)
+    {
+        AVStream *st = c->fc->streams[c->fc->nb_streams-1];
+        av_dict_set(&st->metadata, key, str, 0);
+    }
+    else
+        av_dict_set(&c->fc->metadata, key, str, 0);
+}
+
 static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     char tmp_key[AV_FOURCC_MAX_STRING_SIZE] = {0};
@@ -398,6 +409,7 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     case MKTAG(0xa9,'w','r','n'): key = "warning";   break;
     case MKTAG(0xa9,'w','r','t'): key = "composer";  break;
     case MKTAG(0xa9,'x','y','z'): key = "location";  break;
+    case MKTAG( 'n','a','m','e'): key = "title";     break;
     }
 retry:
     if (c->itunes_metadata && atom.size > 8) {
@@ -525,10 +537,10 @@ retry:
             str[str_size] = 0;
         }
         c->fc->event_flags |= AVFMT_EVENT_FLAG_METADATA_UPDATED;
-        av_dict_set(&c->fc->metadata, key, str, 0);
+        mov_set_metadata(c, key, str);
         if (*language && strcmp(language, "und")) {
             snprintf(key2, sizeof(key2), "%s-%s", key, language);
-            av_dict_set(&c->fc->metadata, key2, str, 0);
+            mov_set_metadata(c, key2, str);
         }
         if (!strcmp(key, "encoder")) {
             int major, minor, micro;
