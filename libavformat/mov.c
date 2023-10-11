@@ -450,6 +450,7 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     case MKTAG(0xa9,'w','r','n'): key = "warning";   break;
     case MKTAG(0xa9,'w','r','t'): key = "composer";  break;
     case MKTAG(0xa9,'x','y','z'): key = "location";  break;
+    case MKTAG( 'n','a','m','e'): key = "title";     break;
     }
 retry:
     if (c->itunes_metadata && atom.size > 8) {
