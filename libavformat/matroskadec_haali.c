@@ -1511,6 +1511,16 @@ static int mkv_read_header(AVFormatContext *s)
       st->disposition |= AV_DISPOSITION_DEFAULT;
     if (info->Forced)
       st->disposition |= AV_DISPOSITION_FORCED;
+    if (info->HearingImpaired)
+      st->disposition |= AV_DISPOSITION_HEARING_IMPAIRED;
+    if (info->VisualImpaired)
+      st->disposition |= AV_DISPOSITION_VISUAL_IMPAIRED;
+    if (info->TextDescriptions)
+      st->disposition |= AV_DISPOSITION_DESCRIPTIONS;
+    if (info->OriginalLanguage)
+      st->disposition |= AV_DISPOSITION_ORIGINAL;
+    if (info->Commentary)
+      st->disposition |= AV_DISPOSITION_COMMENT;
 
     if (info->Type == TT_VIDEO) {
       st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
