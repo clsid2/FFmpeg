@@ -1534,6 +1534,21 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
     case 0x55aa: // Forced
       t.Forced = readUInt(mf,(unsigned)len)!=0;
       break;
+    case 0x55ab: // Hearing Impaired
+      t.HearingImpaired = readUInt(mf,(unsigned)len)!=0;
+      break;
+    case 0x55ac: // Visual Impaired
+      t.VisualImpaired = readUInt(mf,(unsigned)len)!=0;
+      break;
+    case 0x55ad: // Text Descriptions
+      t.TextDescriptions = readUInt(mf,(unsigned)len)!=0;
+      break;
+    case 0x55ae: // Original Language
+      t.OriginalLanguage = readUInt(mf,(unsigned)len)!=0;
+      break;
+    case 0x55af: // Commentary Flag
+      t.Commentary = readUInt(mf,(unsigned)len)!=0;
+      break;
     case 0x9c: // Lacing
       t.Lacing = readUInt(mf,(unsigned)len)!=0;
       break;
