@@ -141,6 +141,11 @@ struct TrackInfo {
   unsigned int  Enabled:1;
   unsigned int  Default:1;
   unsigned int  Forced:1;
+  unsigned int  HearingImpaired:1;
+  unsigned int  VisualImpaired:1;
+  unsigned int  TextDescriptions:1;
+  unsigned int  OriginalLanguage:1;
+  unsigned int  Commentary:1;
   unsigned int  Lacing:1;
   unsigned int  DecodeAll:1;
   unsigned int  CompEnabled:1;
