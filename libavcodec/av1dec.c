@@ -1100,7 +1100,7 @@ static int set_output_frame(AVCodecContext *avctx, AVFrame *frame)
     // TODO: all layers
     if (s->operating_point_idc &&
         av_log2(s->operating_point_idc >> 8) > s->cur_frame.spatial_id)
-        return 0;
+        return AVERROR(EAGAIN);
 
     ret = av_frame_ref(frame, srcframe);
     if (ret < 0)
@@ -1294,7 +1294,7 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
 
                 if (s->cur_frame.f->buf[0]) {
                     ret = set_output_frame(avctx, frame);
-                    if (ret < 0)
+                    if (ret < 0 && ret != AVERROR(EAGAIN))
                         av_log(avctx, AV_LOG_ERROR, "Set output frame error.\n");
                 }
 
@@ -1418,11 +1418,13 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
 
             if (s->raw_frame_header->show_frame && s->cur_frame.f->buf[0]) {
                 ret = set_output_frame(avctx, frame);
-                if (ret < 0) {
+                if (ret < 0 && ret != AVERROR(EAGAIN)) {
                     av_log(avctx, AV_LOG_ERROR, "Set output frame error\n");
                     goto end;
                 }
-            }
+            } else if (show_frame)
+                ret = AVERROR_INVALIDDATA;
+
             raw_tile_group = NULL;
             s->raw_frame_header = NULL;
             if (show_frame) {
