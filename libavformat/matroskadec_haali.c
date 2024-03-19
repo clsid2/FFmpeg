@@ -1126,13 +1126,14 @@ static int mkv_parse_video_color(AVStream *st, TrackInfo *info)
         // Use similar rationals as other standards.
         const int chroma_den = 50000;
         const int luma_den = 10000;
-        AVMasteringDisplayMetadata *metadata =
-            (AVMasteringDisplayMetadata*) av_stream_new_side_data(
-                st, AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
-                sizeof(AVMasteringDisplayMetadata));
-        if (!metadata) {
+        AVMasteringDisplayMetadata *metadata;
+        AVPacketSideData *sd = av_packet_side_data_new(&st->codecpar->coded_side_data,
+                                                       &st->codecpar->nb_coded_side_data,
+                                                       AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
+                                                       sizeof(AVMasteringDisplayMetadata), 0);
+        if (!sd)
             return AVERROR(ENOMEM);
-        }
+        metadata = (AVMasteringDisplayMetadata*)sd->data;
         memset(metadata, 0, sizeof(AVMasteringDisplayMetadata));
         if (has_mastering_primaries) {
             metadata->display_primaries[0][0] = av_make_q(
@@ -1172,14 +1173,15 @@ static int mkv_parse_video_color(AVStream *st, TrackInfo *info)
     }
 
     if (info->AV.Video.Colour.MaxCLL && info->AV.Video.Colour.MaxFALL) {
-        AVContentLightMetadata *metadata =
-            (AVContentLightMetadata*) av_stream_new_side_data(
-                st, AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
-                sizeof(AVContentLightMetadata));
-        if (!metadata) {
+        size_t size = 0;
+        AVContentLightMetadata *metadata = av_content_light_metadata_alloc(&size);
+        if (!metadata)
+            return AVERROR(ENOMEM);
+        if (!av_packet_side_data_add(&st->codecpar->coded_side_data, &st->codecpar->nb_coded_side_data,
+                                     AV_PKT_DATA_CONTENT_LIGHT_LEVEL, metadata, size, 0)) {
+            av_freep(&metadata);
             return AVERROR(ENOMEM);
         }
-        memset(metadata, 0, sizeof(AVContentLightMetadata));
         metadata->MaxCLL = info->AV.Video.Colour.MaxCLL;
         metadata->MaxFALL = info->AV.Video.Colour.MaxFALL;
     }
@@ -1284,11 +1286,10 @@ static int mkv_process_projection(AVStream *st, TrackInfo *info, void *logctx)
     spherical->bound_right  = r;
     spherical->bound_bottom = b;
 
-    ret = av_stream_add_side_data(st, AV_PKT_DATA_SPHERICAL, (uint8_t *)spherical,
-                                  spherical_size);
-    if (ret < 0) {
+    if (!av_packet_side_data_add(&st->codecpar->coded_side_data, &st->codecpar->nb_coded_side_data,
+                                 AV_PKT_DATA_SPHERICAL, spherical, spherical_size, 0)) {
         av_freep(&spherical);
-        return ret;
+        return AVERROR(ENOMEM);
     }
 
     return 0;
@@ -1315,11 +1316,10 @@ static int mkv_stereo3d_conv(AVStream *st, MatroskaVideoStereoModeType stereo_mo
     stereo->type  = stereo_mode_conv[stereo_mode].type;
     stereo->flags = stereo_mode_conv[stereo_mode].flags;
 
-    ret = av_stream_add_side_data(st, AV_PKT_DATA_STEREO3D, (uint8_t *)stereo,
-                                  sizeof(*stereo));
-    if (ret < 0) {
+    if (!av_packet_side_data_add(&st->codecpar->coded_side_data, &st->codecpar->nb_coded_side_data,
+                                 AV_PKT_DATA_STEREO3D, stereo, sizeof(*stereo), 0)) {
         av_freep(&stereo);
-        return ret;
+        return AVERROR(ENOMEM);
     }
 
     return 0;
