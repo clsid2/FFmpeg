@@ -352,6 +352,11 @@ static inline int parse_nal_units(AVCodecParserContext *s,
             break;
         case H264_NAL_SEI:
             ff_h264_sei_decode(&p->sei, &nal.gb, &p->ps, avctx);
+            if (p->sei.common.unregistered.x264_build > 0) {
+                AVPacketSideData *sd = av_packet_side_data_new(&avctx->coded_side_data, &avctx->nb_coded_side_data, AV_PKT_DATA_X264_BUILD, 4, 0);
+                if (sd)
+                    memcpy(sd->data, &p->sei.common.unregistered.x264_build, 4);
+            }
             break;
         case H264_NAL_IDR_SLICE:
             s->key_frame = 1;

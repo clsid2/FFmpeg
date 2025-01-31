@@ -349,6 +349,11 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_LCEVC,
 
     /**
+     * x264 build for this stream
+     */
+    AV_PKT_DATA_X264_BUILD,
+
+    /**
      * The number of side data types.
      * This is not part of the public API/ABI in the sense that it may
      * change when new side data types are added.
