@@ -1536,7 +1536,7 @@ static int mkv_read_header(AVFormatContext *s)
           st->codecpar-> width * info->AV.Video.DisplayHeight,
           1 << 30);
       }
-      if (st->codecpar->codec_id != AV_CODEC_ID_H264 && st->codecpar->codec_id != AV_CODEC_ID_HEVC)
+      if (st->codecpar->codec_id != AV_CODEC_ID_HEVC)
         sti->need_parsing = AVSTREAM_PARSE_HEADERS;
       av_log(s, AV_LOG_DEBUG, "Default Duration: %"PRId64"\n", info->DefaultDuration);
       if (info->DefaultDuration && info->DefaultDuration > 8000000) {
