@@ -67,7 +67,7 @@
 #define        MATROSKA_DOCTYPE      "matroska"
 #define WEBM_DOCTYPE          "webm"
 
-#define        MAX_STRING_LEN              1023
+#define        MAX_STRING_LEN              16383
 #define        QSEGSIZE              512
 #define        MAX_TRACKS              64
 #define        MAX_READAHEAD              (256*1024)
