@@ -817,7 +817,7 @@ av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
     /* Sort the list */
     AV_QSORT(cd_matches, nb_cd_matches, TXCodeletMatch, cmp_matches);
 
-#if !CONFIG_SMALL
+#if !CONFIG_SMALL && 0
     av_log(NULL, AV_LOG_TRACE, "%s\n", bp.str);
 
     for (int i = 0; i < nb_cd_matches; i++) {
