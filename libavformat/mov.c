@@ -4641,7 +4641,7 @@ static int mov_merge_tts_data(MOVContext *mov, AVStream *st, int flags)
     if (!sc->ctts_data && !sc->stts_data)
         return 0;
     // Expand time to sample entries such that we have a 1-1 mapping with samples
-    if (!sc->sample_count || sc->sample_count >= UINT_MAX / sizeof(*sc->tts_data))
+    if (!sc->sample_count || sc->sample_count >= UINT_MAX / sizeof(*sc->tts_data) && (ctts || stts))
         return -1;
 
     if (ctts) {

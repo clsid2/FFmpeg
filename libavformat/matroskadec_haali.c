@@ -1380,8 +1380,8 @@ static int mkv_read_header(AVFormatContext *s)
 
     track->info = info;
 
-    if (!info->Enabled)
-      continue;
+    //if (!info->Enabled)
+    //  continue;
 
     if (info->Type != TT_VIDEO && info->Type != TT_AUDIO && info->Type != TT_SUB) {
       av_log(s, AV_LOG_ERROR, "Unknown or unsupported track type: %d", info->Type);
