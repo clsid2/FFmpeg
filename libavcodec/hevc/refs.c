@@ -224,7 +224,7 @@ int ff_hevc_set_new_ref(HEVCContext *s, HEVCLayerContext *l, int poc)
     }
 
     ref = alloc_frame(s, l);
-    if (!ref)
+    if (!ref || !ref->f)
         return AVERROR(ENOMEM);
 
     s->cur_frame = ref;

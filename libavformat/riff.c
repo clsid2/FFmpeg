@@ -358,6 +358,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_FLV1,         MKTAG('F', 'L', 'V', '1') },
     { AV_CODEC_ID_FLV1,         MKTAG('S', '2', '6', '3') },
     { AV_CODEC_ID_FLASHSV,      MKTAG('F', 'S', 'V', '1') },
+    { AV_CODEC_ID_FLASHSV2,     MKTAG('F', 'S', 'V', '2') },
     { AV_CODEC_ID_SVQ1,         MKTAG('s', 'v', 'q', '1') },
     { AV_CODEC_ID_TSCC,         MKTAG('t', 's', 'c', 'c') },
     { AV_CODEC_ID_ULTI,         MKTAG('U', 'L', 'T', 'I') },

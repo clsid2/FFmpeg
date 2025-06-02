@@ -462,14 +462,24 @@ static inline int decode_simple_internal(AVCodecContext *avctx, AVFrame *frame, 
 
     // FF_CODEC_CB_TYPE_DECODE decoders must not return AVERROR EAGAIN
     // code later will add AVERROR(EAGAIN) to a pointer
-    av_assert0(consumed != AVERROR(EAGAIN));
+    if (consumed == AVERROR(EAGAIN)) { // av_assert0(consumed != AVERROR(EAGAIN));
+        #ifdef _MSC_VER
+        __debugbreak();
+        #endif
+        return AVERROR_BUG;
+    }
+
     if (consumed < 0)
         ret = consumed;
     if (consumed >= 0 && avctx->codec->type == AVMEDIA_TYPE_VIDEO)
         consumed = pkt->size;
 
-    if (!ret)
-        av_assert0(frame->buf[0]);
+    if (!ret && !frame->buf[0]) { // av_assert0(frame->buf[0]);
+        #ifdef _MSC_VER
+        __debugbreak();
+        #endif
+        return AVERROR_BUG;
+    }
     if (ret == AVERROR(EAGAIN))
         ret = 0;
 
@@ -682,10 +692,19 @@ static int decode_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame,
                                                          frame->pts,
                                                          frame->pkt_dts);
 
+#if 0
         /* the only case where decode data is not set should be decoders
          * that do not call ff_get_buffer() */
         av_assert0(frame->private_ref ||
                    !(avctx->codec->capabilities & AV_CODEC_CAP_DR1));
+#else
+        if (!ret && !frame->private_ref && (avctx->codec->capabilities & AV_CODEC_CAP_DR1)) {
+            #ifdef _MSC_VER
+            __debugbreak();
+            #endif
+            ret = AVERROR_BUG;
+        }
+#endif
 
         if (frame->private_ref) {
             FrameDecodeData *fdd = frame->private_ref;
