@@ -46,6 +46,7 @@ typedef struct H265LevelDescriptor {
 
 typedef struct H265ProfileDescriptor {
     const char *name;
+    int rext_profile;
     uint8_t profile_idc;
     uint8_t high_throughput;
 
