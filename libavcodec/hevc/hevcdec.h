@@ -579,6 +579,8 @@ typedef struct HEVCContext {
 
     int film_grain_warning_shown;
 
+    int rext_profile;
+
     // dts of the packet currently being decoded
     int64_t pkt_dts;
 

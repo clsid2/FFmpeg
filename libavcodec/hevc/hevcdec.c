@@ -45,6 +45,8 @@
 #include "codec_internal.h"
 #include "decode.h"
 #include "golomb.h"
+#include "h265_profile_level.h"
+#include "h265_rext_profiles.h"
 #include "hevc.h"
 #include "parse.h"
 #include "hevcdec.h"
@@ -327,6 +329,53 @@ static int decode_lt_rps(const HEVCSPS *sps, LongTermRPS *rps,
     return 0;
 }
 
+static int ptl_convert(const PTLCommon *general_ptl, H265RawProfileTierLevel *h265_raw_ptl)
+{
+    h265_raw_ptl->general_profile_space = general_ptl->profile_space;
+    h265_raw_ptl->general_tier_flag     = general_ptl->tier_flag;
+    h265_raw_ptl->general_profile_idc   = general_ptl->profile_idc;
+
+    memcpy(h265_raw_ptl->general_profile_compatibility_flag,
+                                  general_ptl->profile_compatibility_flag, 32 * sizeof(uint8_t));
+
+#define copy_field(name) h265_raw_ptl->general_ ## name = general_ptl->name
+    copy_field(progressive_source_flag);
+    copy_field(interlaced_source_flag);
+    copy_field(non_packed_constraint_flag);
+    copy_field(frame_only_constraint_flag);
+    copy_field(max_12bit_constraint_flag);
+    copy_field(max_10bit_constraint_flag);
+    copy_field(max_8bit_constraint_flag);
+    copy_field(max_422chroma_constraint_flag);
+    copy_field(max_420chroma_constraint_flag);
+    copy_field(max_monochrome_constraint_flag);
+    copy_field(intra_constraint_flag);
+    copy_field(one_picture_only_constraint_flag);
+    copy_field(lower_bit_rate_constraint_flag);
+    copy_field(max_14bit_constraint_flag);
+    copy_field(inbld_flag);
+    copy_field(level_idc);
+#undef copy_field
+
+    return 0;
+}
+
+static int get_rext_profile(const HEVCSPS *sps)
+{
+    const PTL *ptl = &sps->ptl;
+    const PTLCommon *general_ptl = &ptl->general_ptl;
+    H265RawProfileTierLevel h265_raw_ptl = {0};
+
+    /* convert PTLCommon to H265RawProfileTierLevel */
+    ptl_convert(general_ptl, &h265_raw_ptl);
+
+    const H265ProfileDescriptor *profile = ff_h265_get_profile(&h265_raw_ptl);
+    if (profile == NULL)
+        return FF_HEVC_REXT_PROFILE_INVALID;
+
+    return profile->rext_profile;
+}
+
 static void export_stream_params(HEVCContext *s, const HEVCSPS *sps)
 {
     AVCodecContext *avctx = s->avctx;
@@ -381,6 +430,8 @@ static void export_stream_params(HEVCContext *s, const HEVCSPS *sps)
     if (num > 0 && den > 0)
         av_reduce(&avctx->framerate.den, &avctx->framerate.num,
                   num, den, 1 << 30);
+
+    s->rext_profile = get_rext_profile(sps);
 }
 
 static int export_stream_params_from_sei(HEVCContext *s)
@@ -4193,7 +4244,7 @@ static const AVOption options[] = {
         { "unspecified", .type = AV_OPT_TYPE_CONST, .default_val = { .i64 = AV_STEREO3D_VIEW_UNSPEC }, .unit = "view_pos" },
         { "left",        .type = AV_OPT_TYPE_CONST, .default_val = { .i64 = AV_STEREO3D_VIEW_LEFT },   .unit = "view_pos" },
         { "right",       .type = AV_OPT_TYPE_CONST, .default_val = { .i64 = AV_STEREO3D_VIEW_RIGHT },  .unit = "view_pos" },
-
+    { "rext_profile", "Range Extension profile", OFFSET(rext_profile), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, PAR | AV_OPT_FLAG_EXPORT | AV_OPT_FLAG_READONLY },
     { NULL },
 };
 
