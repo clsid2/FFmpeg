@@ -63,6 +63,7 @@ OBJS = ac3_parser.o                                                     \
        vlc.o                                                            \
        vorbis_parser.o                                                  \
        xiph.o                                                           \
+       h265_profile_level.o                                             \
 
 SHLIBOBJS = float_scalarproduct.o                                       \
             timecode_internal.o                                         \
