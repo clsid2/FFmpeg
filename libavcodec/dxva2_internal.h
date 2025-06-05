@@ -33,6 +33,7 @@
 
 #define FF_DXVA2_WORKAROUND_SCALING_LIST_ZIGZAG 1 ///< Work around for DXVA2/Direct3D11 and old UVD/UVD+ ATI video cards
 #define FF_DXVA2_WORKAROUND_INTEL_CLEARVIDEO    2 ///< Work around for DXVA2/Direct3D11 and old Intel GPUs with ClearVideo interface
+#define FF_DXVA2_WORKAROUND_NVIDIA_HEVC_420P12  4 ///< Work around for DXVA2/Direct3D11 and NVIDIA not using Rext on Main12
 
 #if CONFIG_DXVA2
 #include "dxva2.h"
