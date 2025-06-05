@@ -33,10 +33,14 @@
 #include "compat/windows/dxva_hevc.h"
 #endif
 
+#if !HAVE_DXVA_PICPARAMS_HEVC_RANGEEXT
+#include "compat/windows/dxva_hevc_rext.h"
+#endif
+
 #define MAX_SLICES 256
 
 struct hevc_dxva2_picture_context {
-    DXVA_PicParams_HEVC   pp;
+    DXVA_PicParams_HEVC_RangeExt ppx;
     DXVA_Qmatrix_HEVC     qm;
     unsigned              slice_count;
     DXVA_Slice_HEVC_Short slice_short[MAX_SLICES];
@@ -204,6 +208,43 @@ void ff_dxva2_hevc_fill_picture_parameters(const AVCodecContext *avctx, AVDXVACo
     DO_REF_LIST(LT_CURR, RefPicSetLtCurr);
 
     pp->StatusReportFeedbackNumber = 1 + DXVA_CONTEXT_REPORT_ID(avctx, ctx)++;
+}
+
+static void ff_dxva2_hevc_fill_picture_parameters_ext(const AVCodecContext *avctx, AVDXVAContext *ctx,
+                                    DXVA_PicParams_HEVC_RangeExt *ppx)
+{
+    const HEVCContext *h = avctx->priv_data;
+    const HEVCPPS *pps = h->pps;
+    const HEVCSPS *sps = pps->sps;
+    int i;
+
+    memset(ppx, 0, sizeof(*ppx));
+
+    ff_dxva2_hevc_fill_picture_parameters(avctx, ctx, &ppx->params);
+
+    ppx->dwRangeExtensionFlags = (sps->transform_skip_rotation_enabled         <<  0) |
+                                 (sps->transform_skip_context_enabled          <<  1) |
+                                 (sps->implicit_rdpcm_enabled                  <<  2) |
+                                 (sps->explicit_rdpcm_enabled                  <<  3) |
+                                 (sps->extended_precision_processing           <<  4) |
+                                 (sps->intra_smoothing_disabled                <<  5) |
+                                 (sps->persistent_rice_adaptation_enabled      <<  6) |
+                                 (sps->high_precision_offsets_enabled          <<  7) |
+                                 (sps->cabac_bypass_alignment_enabled          <<  8) |
+                                 (pps->cross_component_prediction_enabled_flag <<  9) |
+                                 (pps->chroma_qp_offset_list_enabled_flag      << 10) |
+                                 (0                                            << 11);
+
+    ppx->diff_cu_chroma_qp_offset_depth = pps->diff_cu_chroma_qp_offset_depth;
+    ppx->log2_sao_offset_scale_luma = pps->log2_sao_offset_scale_luma;
+    ppx->log2_sao_offset_scale_chroma = pps->log2_sao_offset_scale_chroma;
+    ppx->log2_max_transform_skip_block_size_minus2 = pps->log2_max_transform_skip_block_size - 2;
+
+    ppx->chroma_qp_offset_list_len_minus1 = pps->chroma_qp_offset_list_len_minus1;
+    for (i = 0; i <= pps->chroma_qp_offset_list_len_minus1; i++) {
+        ppx->cb_qp_offset_list[i] = pps->cb_qp_offset_list[i];
+        ppx->cr_qp_offset_list[i] = pps->cr_qp_offset_list[i];
+    }
 }
 
 void ff_dxva2_hevc_fill_scaling_lists(const AVCodecContext *avctx, AVDXVAContext *ctx, DXVA_Qmatrix_HEVC *qm)
@@ -380,7 +421,10 @@ static int dxva2_hevc_start_frame(AVCodecContext *avctx,
     av_assert0(ctx_pic);
 
     /* Fill up DXVA_PicParams_HEVC */
-    ff_dxva2_hevc_fill_picture_parameters(avctx, ctx, &ctx_pic->pp);
+    if (avctx->profile == AV_PROFILE_HEVC_REXT)
+        ff_dxva2_hevc_fill_picture_parameters_ext(avctx, ctx, &ctx_pic->ppx);
+    else
+        ff_dxva2_hevc_fill_picture_parameters(avctx, ctx, &ctx_pic->ppx.params);
 
     /* Fill up DXVA_Qmatrix_HEVC */
     ff_dxva2_hevc_fill_scaling_lists(avctx, ctx, &ctx_pic->qm);
@@ -416,16 +460,18 @@ static int dxva2_hevc_decode_slice(AVCodecContext *avctx,
 
 static int dxva2_hevc_end_frame(AVCodecContext *avctx)
 {
+    AVDXVAContext *ctx = DXVA_CONTEXT(avctx);
     HEVCContext *h = avctx->priv_data;
     struct hevc_dxva2_picture_context *ctx_pic = h->cur_frame->hwaccel_picture_private;
-    int scale = ctx_pic->pp.dwCodingParamToolFlags & 1;
+    int scale = ctx_pic->ppx.params.dwCodingParamToolFlags & 1;
+    int rext = avctx->profile == AV_PROFILE_HEVC_REXT && ff_dxva2_is_d3d11(avctx) && !((avctx->sw_pix_fmt == AV_PIX_FMT_YUV420P12) && (DXVA_CONTEXT_WORKAROUND(avctx, ctx) & FF_DXVA2_WORKAROUND_NVIDIA_HEVC_420P12));
     int ret;
 
     if (ctx_pic->slice_count <= 0 || ctx_pic->bitstream_size <= 0)
         return -1;
 
     ret = ff_dxva2_common_end_frame(avctx, h->cur_frame->f,
-                                    &ctx_pic->pp, sizeof(ctx_pic->pp),
+                                    &ctx_pic->ppx, rext ? sizeof(ctx_pic->ppx) : sizeof(ctx_pic->ppx.params),
                                     scale ? &ctx_pic->qm : NULL, scale ? sizeof(ctx_pic->qm) : 0,
                                     commit_bitstream_and_slice_buffer);
     return ret;
