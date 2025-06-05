@@ -102,6 +102,7 @@ static const struct {
     { DXGI_FORMAT_Y210,         AV_PIX_FMT_Y210 },
     { DXGI_FORMAT_Y410,         AV_PIX_FMT_XV30 },
     { DXGI_FORMAT_P016,         AV_PIX_FMT_P012 },
+    { DXGI_FORMAT_P016,         AV_PIX_FMT_P016 },
     { DXGI_FORMAT_Y216,         AV_PIX_FMT_Y216 },
     { DXGI_FORMAT_Y416,         AV_PIX_FMT_XV48 },
     // There is no 12bit pixel format defined in DXGI_FORMAT*, use 16bit to compatible
