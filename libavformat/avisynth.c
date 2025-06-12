@@ -232,6 +232,7 @@ static int avisynth_create_stream_video(AVFormatContext *s, AVStream *st)
 
     st->avg_frame_rate    = (AVRational) { avs->vi->fps_numerator,
                                            avs->vi->fps_denominator };
+    st->r_frame_rate      = st->avg_frame_rate;
     st->start_time        = 0;
     st->duration          = avs->vi->num_frames;
     st->nb_frames         = avs->vi->num_frames;
