@@ -16,23 +16,4 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_KBDWIN_H
-#define AVCODEC_KBDWIN_H
-
-#include <stdint.h>
-
-/**
- * Maximum window size for ff_kbd_window_init.
- */
-#define FF_KBD_WINDOW_MAX 2048
-
-/**
- * Generate a Kaiser-Bessel Derived Window.
- * @param   window  pointer to half window
- * @param   alpha   determines window shape
- * @param   n       size of half window, max FF_KBD_WINDOW_MAX
- */
-void ff_kbd_window_init(float *window, float alpha, int n);
-void ff_kbd_window_init_fixed(int32_t *window, float alpha, int n);
-
-#endif /* AVCODEC_KBDWIN_H */
+#include "libavutil/float_fmul_reverse.c"
