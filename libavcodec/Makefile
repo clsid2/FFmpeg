@@ -67,6 +67,7 @@ OBJS = ac3_parser.o                                                     \
        h265_profile_level.o                                             \
 
 SHLIBOBJS = float_scalarproduct.o                                       \
+            float_fmul_reverse.o                                        \
             timecode_internal.o                                         \
 
 # subsystems
@@ -220,6 +221,7 @@ OBJS-$(CONFIG_AC3_ENCODER)             += ac3enc_float.o ac3enc.o ac3tab.o \
                                           ac3.o kbdwin.o
 OBJS-$(CONFIG_AC3_FIXED_ENCODER)       += ac3enc_fixed.o ac3enc.o ac3tab.o ac3.o kbdwin.o
 OBJS-$(CONFIG_AC3_MF_ENCODER)          += mfenc.o mf_utils.o
+OBJS-$(CONFIG_AC4_DECODER)             += ac4dec.o kbdwin.o
 OBJS-$(CONFIG_ACELP_KELVIN_DECODER)    += g729dec.o lsp.o celp_filters.o acelp_filters.o acelp_pitch_delay.o acelp_vectors.o g729postfilter.o
 OBJS-$(CONFIG_AGM_DECODER)             += agm.o jpegquanttables.o
 OBJS-$(CONFIG_AHX_DECODER)             += mpegaudiodec_float.o
