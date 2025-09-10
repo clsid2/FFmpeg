@@ -514,8 +514,8 @@ static int dxva2_h264_end_frame(AVCodecContext *avctx)
                                     &ctx_pic->pp, sizeof(ctx_pic->pp),
                                     &ctx_pic->qm, sizeof(ctx_pic->qm),
                                     commit_bitstream_and_slice_buffer);
-    if (!ret)
-        ff_h264_draw_horiz_band(h, sl, 0, h->avctx->height);
+//    if (!ret)
+//        ff_h264_draw_horiz_band(h, sl, 0, h->avctx->height);
     return ret;
 }
 
