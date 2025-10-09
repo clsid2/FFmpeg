@@ -6599,7 +6599,7 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             skip_bits_long(gb, s->substream_size[i] * 8);
             break;
         default:
-            av_assert0(0);
+            return AVERROR_INVALIDDATA;
         }
 
         if (ret < 0)
