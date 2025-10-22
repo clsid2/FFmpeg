@@ -3,21 +3,21 @@
  *
  * Copyright (c) 2019 Paul B Mahol
  *
- * This file is part of FFmpeg.
+ * This file is part of Librempeg
  *
- * FFmpeg is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Librempeg is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
  *
- * FFmpeg is distributed in the hope that it will be useful,
+ * Librempeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * You should have received a copy of the GNU General Public License along
+ * with Librempeg; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 #define ASSERT_LEVEL 2
@@ -413,7 +413,7 @@ typedef struct PresentationInfo {
     int     hsf_ext;
     EMDFInfo emdf[32];
     PresentationSubstreamInfo psinfo;
-    SubstreamInfo ssinfo;
+    SubstreamInfo ssinfo[4];
 } PresentationInfo;
 
 typedef struct AC4DecodeContext {
@@ -598,7 +598,7 @@ static const AVChannelLayout channel_mode_layouts[] = {
     {
         .nb_channels = 12,
         .order = AV_CHANNEL_ORDER_NATIVE,
-        .u.mask = AV_CH_LAYOUT_7POINT0_FRONT | AV_CH_LOW_FREQUENCY |
+        .u.mask = AV_CH_LAYOUT_7POINT0 | AV_CH_LOW_FREQUENCY |
                   AV_CH_TOP_FRONT_LEFT | AV_CH_TOP_FRONT_RIGHT |
                   AV_CH_TOP_BACK_LEFT | AV_CH_TOP_BACK_RIGHT,
     },
@@ -890,38 +890,17 @@ static int emdf_payloads_substream_info(AC4DecodeContext *s, EMDFInfo *e)
 static int emdf_protection(AC4DecodeContext *s, EMDFInfo *e)
 {
     GetBitContext *gb = &s->gbc;
-    int first, second;
+    int first, second, skip = 0;
 
     first = get_bits(gb, 2);
     second = get_bits(gb, 2);
 
-    switch (first) {
-    case 0:
-        break;
-    case 1:
-        skip_bits(gb, 8);
-        break;
-    case 2:
-        skip_bits_long(gb, 32);
-        break;
-    case 3:
-        skip_bits_long(gb, 128);
-        break;
-    }
+    if (first > 0)
+        skip += 1 << (2 * (first - 1));
+    if (second > 0)
+        skip += 1 << (2 * (second - 1));
 
-    switch (second) {
-    case 0:
-        break;
-    case 1:
-        skip_bits(gb, 8);
-        break;
-    case 2:
-        skip_bits_long(gb, 32);
-        break;
-    case 3:
-        skip_bits_long(gb, 128);
-        break;
-    }
+    skip_bits_long(gb, 8 * skip);
 
     return 0;
 }
@@ -1049,9 +1028,9 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
     p->single_substream = get_bits1(gb);
     if (p->single_substream != 1) {
         p->presentation_config = get_bits(gb, 3);
-        if (p->presentation_config == 0x7) {
+        if (p->presentation_config == 7)
             p->presentation_config += variable_bits(gb, 2);
-        }
+        av_log(s->avctx, AV_LOG_DEBUG, "presentation config: %d\n", p->presentation_config);
     }
 
     p->presentation_version = get_unary(gb, 0, 31);
@@ -1072,22 +1051,31 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
         emdf_info(s, &p->emdf[0]);
 
         if (p->single_substream == 1) {
-            ret = ac4_substream_info(s, p, &p->ssinfo);
+            ret = ac4_substream_info(s, p, &p->ssinfo[0]);
             if (ret < 0)
                 return ret;
         } else {
             p->hsf_ext = get_bits1(gb);
             switch (p->presentation_config) {
             case 0:
-                ret = ac4_substream_info(s, p, &p->ssinfo);
+                ret = ac4_substream_info(s, p, &p->ssinfo[0]);
                 if (ret < 0)
                     return ret;
-                ret = ac4_hsf_ext_substream_info(s, &p->ssinfo, 1);
+                if (p->hsf_ext) {
+                    ret = ac4_hsf_ext_substream_info(s, &p->ssinfo[0], 1);
+                    if (ret < 0)
+                        return ret;
+                }
+                ret = ac4_substream_info(s, p, &p->ssinfo[1]);
                 if (ret < 0)
                     return ret;
-                ret = ac4_substream_info(s, p, &p->ssinfo);
-                if (ret < 0)
-                    return ret;
+                break;
+            case 1:
+            case 2:
+            case 3:
+            case 4:
+            case 5:
+                //FIXME
                 break;
             default:
                 presentation_config_ext_info(s);
@@ -1508,6 +1496,7 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
 
     if (single_substream_group != 1 && p->presentation_config == 6) {
         p->add_emdf_substreams = 1;
+        av_log(s->avctx, AV_LOG_DEBUG, "add_emdf_substreams\n");
     } else {
         if (s->version != 1)
             p->mdcompat = get_bits(gb, 3);
@@ -1524,6 +1513,7 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
 
         if (single_substream_group == 1) {
             ac4_sgi_specifier(s, &s->ssgroup[0]);
+            av_log(s->avctx, AV_LOG_DEBUG, "single substream group\n");
             p->n_substream_groups = 1;
         } else {
             p->multi_pid = get_bits1(gb);
@@ -4134,7 +4124,7 @@ static int mono_data(AC4DecodeContext *s, Substream *ss,
 }
 
 static int two_channel_data(AC4DecodeContext *s, Substream *ss,
-                            uint8_t ch_id[2], int x, int iframe)
+                            const uint8_t ch_id[2], int x, int iframe)
 {
     SubstreamChannel *ssch0 = &ss->ssch[ch_id[0]];
     SubstreamChannel *ssch1 = &ss->ssch[ch_id[1]];
@@ -4227,23 +4217,47 @@ static int three_channel_data(AC4DecodeContext *s, Substream *ss,
 
 static int immers_cfg(AC4DecodeContext *s, Substream *ss)
 {
-    if (ss->codec_mode != IM_SCPL)
+    if (ss->im_codec_mode != IM_SCPL)
         aspx_config(s, ss);
 
-    if (ss->codec_mode == IM_ASPX_ACPL_1)
+    if (ss->im_codec_mode == IM_ASPX_ACPL_1)
         acpl_config_1ch(s, ss, ACPL_PARTIAL);
 
-    if (ss->codec_mode == IM_ASPX_ACPL_2)
+    if (ss->im_codec_mode == IM_ASPX_ACPL_2)
         acpl_config_1ch(s, ss, ACPL_FULL);
 
     return 0;
 }
+
+static const uint8_t immersive_ch_index[2][2][2] = {
+    {
+        { 0, 1 },
+        { 3, 4 },
+    },
+    {
+        { 0, 3 },
+        { 1, 4 },
+    },
+};
 
 static int immersive_channel_element(AC4DecodeContext *s, int lfe, int fronts, int iframe)
 {
     GetBitContext *gb = &s->gbc;
     Substream *ss = &s->substream;
     int ret;
+
+    s->ch_map[AV_CHAN_FRONT_LEFT]      = 0;
+    s->ch_map[AV_CHAN_FRONT_RIGHT]     = 1;
+    s->ch_map[AV_CHAN_FRONT_CENTER]    = 2;
+    s->ch_map[AV_CHAN_LOW_FREQUENCY]   = 7;
+    s->ch_map[AV_CHAN_SIDE_LEFT]       = 3;
+    s->ch_map[AV_CHAN_SIDE_RIGHT]      = 4;
+    s->ch_map[AV_CHAN_BACK_LEFT]       = 5;
+    s->ch_map[AV_CHAN_BACK_RIGHT]      = 6;
+    s->ch_map[AV_CHAN_TOP_FRONT_LEFT]  = 8;
+    s->ch_map[AV_CHAN_TOP_FRONT_RIGHT] = 9;
+    s->ch_map[AV_CHAN_TOP_BACK_LEFT]   = 10;
+    s->ch_map[AV_CHAN_TOP_BACK_RIGHT]  = 11;
 
     ss->im_codec_mode = get_bits1(gb);
     if (!ss->im_codec_mode)
@@ -4269,13 +4283,13 @@ static int immersive_channel_element(AC4DecodeContext *s, int lfe, int fronts, i
     switch (ss->core_5ch_grouping) {
     case 0:
         ss->mode_2ch = get_bits1(gb);
-        ret = two_channel_data(s, ss, (uint8_t []){0, 1}, 0, iframe);
+        ret = two_channel_data(s, ss, immersive_ch_index[ss->mode_2ch][0], 0, iframe);
         if (ret < 0)
             return ret;
-        ret = two_channel_data(s, ss, (uint8_t []){2, 3}, 1, iframe);
+        ret = two_channel_data(s, ss, immersive_ch_index[ss->mode_2ch][1], 1, iframe);
         if (ret < 0)
             return ret;
-        ret = mono_data(s, ss, 4, 0, iframe);
+        ret = mono_data(s, ss, 2, 0, iframe);
         break;
     case 1:
         ret = three_channel_data(s, ss, (uint8_t []){0, 1, 2}, iframe);
@@ -4309,11 +4323,11 @@ static int immersive_channel_element(AC4DecodeContext *s, int lfe, int fronts, i
             ret = chparam_info(s, ss, 6);
             if (ret < 0)
                 return ret;
-
-            ret = two_channel_data(s, ss, (uint8_t []){5, 6}, 2, iframe);
-            if (ret < 0)
-                return ret;
         }
+
+        ret = two_channel_data(s, ss, (uint8_t []){5, 6}, 2, iframe);
+        if (ret < 0)
+            return ret;
     }
 
     if (ss->im_codec_mode == IM_ASPX_SCPL) {
@@ -4350,17 +4364,17 @@ static int immersive_channel_element(AC4DecodeContext *s, int lfe, int fronts, i
         ret = aspx_data_2ch(s, ss, (uint8_t []){0, 1}, iframe);
         if (ret < 0)
             return ret;
-        ret = aspx_data_2ch(s, ss, (uint8_t []){2, 3}, iframe);
+        ret = aspx_data_2ch(s, ss, (uint8_t []){3, 4}, iframe);
         if (ret < 0)
             return ret;
 
         if (ss->im_codec_mode != IM_ASPX_AJCC) {
-            ret = aspx_data_2ch(s, ss, (uint8_t []){4, 5}, iframe);
+            ret = aspx_data_2ch(s, ss, (uint8_t []){5, 6}, iframe);
             if (ret < 0)
                 return ret;
         }
 
-        ret = aspx_data_1ch(s, ss, 6, iframe);
+        ret = aspx_data_1ch(s, ss, 2, iframe);
         if (ret < 0)
             return ret;
     }
@@ -6570,7 +6584,7 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     }
 
     presentation = FFMIN(s->target_presentation, FFMAX(0, s->nb_presentations - 1));
-    ssinfo = s->version == 2 ? &s->ssgroup[0].ssinfo : &s->pinfo[presentation].ssinfo;
+    ssinfo = s->version == 2 ? &s->ssgroup[0].ssinfo : &s->pinfo[presentation].ssinfo[0];
     avctx->sample_rate = s->fs_index ? 48000 : 44100;
 
     if (ssinfo->channel_mode >= FF_ARRAY_ELEMS(channel_mode_layouts)) {
@@ -6599,7 +6613,7 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             skip_bits_long(gb, s->substream_size[i] * 8);
             break;
         default:
-            return AVERROR_INVALIDDATA;
+            av_assert0(0);
         }
 
         if (ret < 0)
