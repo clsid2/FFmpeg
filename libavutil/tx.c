@@ -541,7 +541,7 @@ int ff_tx_gen_default_map(AVTXContext *s, FFTXCodeletOptions *opts)
     return 0;
 }
 
-#if !CONFIG_SMALL
+#if 0
 static void print_flags(AVBPrint *bp, uint64_t f)
 {
     int prev = 0;
@@ -719,7 +719,7 @@ av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
     unsigned int cd_matches_size = 0;
     int codelet_list_idx = codelet_list_num;
     int nb_cd_matches = 0;
-#if !CONFIG_SMALL
+#if 0
     AVBPrint bp;
 #endif
 
@@ -798,7 +798,7 @@ av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
         }
     }
 
-#if !CONFIG_SMALL
+#if 0
     /* Print debugging info */
     av_bprint_init(&bp, 0, AV_BPRINT_SIZE_AUTOMATIC);
     av_bprintf(&bp, "For transform of length %i, %s, ", len,
@@ -817,7 +817,7 @@ av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
     /* Sort the list */
     AV_QSORT(cd_matches, nb_cd_matches, TXCodeletMatch, cmp_matches);
 
-#if !CONFIG_SMALL
+#if 0
     av_log(NULL, AV_LOG_TRACE, "%s\n", bp.str);
 
     for (int i = 0; i < nb_cd_matches; i++) {
@@ -930,7 +930,7 @@ av_cold int av_tx_init(AVTXContext **ctx, av_tx_fn *tx, enum AVTXType type,
     *ctx = &tmp.sub[0];
     *tx  = tmp.fn[0];
 
-#if !CONFIG_SMALL
+#if 0
     av_log(NULL, AV_LOG_DEBUG, "Transform tree:\n");
     print_tx_structure(*ctx, 0);
 #endif
