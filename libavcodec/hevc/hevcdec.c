@@ -1736,10 +1736,10 @@ static int hls_pcm_sample(HEVCLocalContext *lc, const HEVCLayerContext *l,
     uint8_t *dst1 = &s->cur_frame->f->data[1][(y0 >> sps->vshift[1]) * stride1 + ((x0 >> sps->hshift[1]) << sps->pixel_shift)];
     uint8_t *dst2 = &s->cur_frame->f->data[2][(y0 >> sps->vshift[2]) * stride2 + ((x0 >> sps->hshift[2]) << sps->pixel_shift)];
 
-    int length         = cb_size * cb_size * sps->pcm.bit_depth +
+    int length         = cb_size * cb_size * sps->pcm.bit_depth + (sps->chroma_format_idc != 0 ?
                          (((cb_size >> sps->hshift[1]) * (cb_size >> sps->vshift[1])) +
                           ((cb_size >> sps->hshift[2]) * (cb_size >> sps->vshift[2]))) *
-                          sps->pcm.bit_depth_chroma;
+                          sps->pcm.bit_depth_chroma : 0);
     const uint8_t *pcm = skip_bytes(&lc->cc, (length + 7) >> 3);
     int ret;
 
