@@ -1587,7 +1587,7 @@ static void parseTrackEntry(MatroskaFile *mf,ulonglong toplen) {
     case 0x63a2: // CodecPrivate
       if (cp)
         errorjmp(mf,"Duplicate CodecPrivate");
-      if (len>33554432) // 32MB
+      if (len>67108864) // 64MB
         errorjmp(mf,"CodecPrivate is too large: %d",(int)len);
       cplen = (unsigned)len;
       mf->cpbuf = cp = mf->cache->memrealloc(mf->cache, mf->cpbuf, cplen);
