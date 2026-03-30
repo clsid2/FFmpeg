@@ -2088,12 +2088,11 @@ static int http_close(URLContext *h)
 static int64_t http_seek_internal(URLContext *h, int64_t off, int whence, int force_reconnect)
 {
     HTTPContext *s = h->priv_data;
-    URLContext *old_hd = NULL;
+    URLContext *old_hd = s->hd;
     uint64_t old_off = s->off;
     uint8_t old_buf[BUFFER_SIZE];
     int old_buf_size, ret;
     AVDictionary *options = NULL;
-    uint8_t discard[4096];
 
     if (whence == AVSEEK_SIZE)
         return s->filesize == UINT64_MAX ? AVERROR(ENOSYS) : s->filesize;
@@ -2135,27 +2134,7 @@ static int64_t http_seek_internal(URLContext *h, int64_t off, int whence, int fo
     /* we save the old context in case the seek fails */
     old_buf_size = s->buf_end - s->buf_ptr;
     memcpy(old_buf, s->buf_ptr, old_buf_size);
-
-    /* try to reuse existing connection for small seeks */
-    uint64_t remaining = s->range_end - old_off - old_buf_size;
-    if (s->hd && !s->willclose && s->range_end && remaining <= ffurl_get_short_seek(h)) {
-        /* drain remaining data left on the wire from previous request */
-        av_log(h, AV_LOG_DEBUG, "Soft-seeking to offset %"PRIu64" by draining "
-               "%"PRIu64" remaining byte(s)\n", s->off, remaining);
-        while (remaining) {
-            ret = ffurl_read(s->hd, discard, FFMIN(remaining, sizeof(discard)));
-            if (ret < 0 || ret == AVERROR_EOF || (ret == 0 && remaining)) {
-                /* connection broken or stuck, need to reopen */
-                ffurl_closep(&s->hd);
-                break;
-            }
-            remaining -= ret;
-        }
-    } else {
-        /* can't soft seek; always open new connection */
-        old_hd = s->hd;
-        s->hd = NULL;
-    }
+    s->hd = NULL;
 
     /* if it fails, continue on old connection */
     if ((ret = http_open_cnx(h, &options)) < 0) {
