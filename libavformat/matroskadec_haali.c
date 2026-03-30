@@ -1259,7 +1259,7 @@ static int mkv_process_projection(AVStream *st, TrackInfo *info, void *logctx)
                 rotation -= 360;
 
             if (rotation != 0)
-                av_dict_set_int(&st->metadata, "rotate", rotation, 0);
+                av_dict_set_int(&st->metadata, "rotate", -rotation, 0);
         }
         return 0;
     default:
