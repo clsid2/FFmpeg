@@ -2353,7 +2353,7 @@ decode_intra_mb:
     if (CHROMA444(h) && IS_8x8DCT(mb_type)){
         int i;
         uint8_t *nnz_cache = sl->non_zero_count_cache;
-        if (h->x264_build < 151U) {
+        if (h->x264_build < 151U || h->x264_build == -1 && h->avctx->color_trc <= AVCOL_TRC_UNSPECIFIED) {
             for (i = 0; i < 2; i++){
                 if (sl->left_type[LEFT(i)] && !IS_8x8DCT(sl->left_type[LEFT(i)])) {
                     nnz_cache[3+8* 1 + 2*8*i]=
