@@ -1394,6 +1394,26 @@ static int mkv_parse_dovi_streams(AVFormatContext *s)
     return 0;
 }
 
+static int mkv_parse_hvce(AVFormatContext *s, AVStream *st, const uint8_t *data, unsigned int size)
+{
+    AVPacketSideData *sd;
+
+    if (size < 23) {
+        av_log(s, AV_LOG_ERROR, "Invalid hvcE size %d\n", size);
+        return AVERROR_INVALIDDATA;
+    }
+
+    sd = av_packet_side_data_new(&st->codecpar->coded_side_data,
+                                 &st->codecpar->nb_coded_side_data,
+                                 AV_PKT_DATA_HEVC_CONF,
+                                 size, 0);
+    if (!sd)
+        return AVERROR(ENOMEM);
+
+    memcpy(sd->data, data, size);
+    return 0;
+}
+
 static int mkv_read_header(AVFormatContext *s)
 {
   MatroskaDemuxContext *ctx = (MatroskaDemuxContext *)s->priv_data;
@@ -1694,6 +1714,9 @@ static int mkv_read_header(AVFormatContext *s)
         case MKBETAG('d','v','c','C'):
         case MKBETAG('d','v','v','C'):
             ff_isom_parse_dvcc_dvvc(s, st, mapping->Data, mapping->Length);
+            break;
+        case MKBETAG('h','v','c','E'):
+            mkv_parse_hvce(s, st, mapping->Data, mapping->Length);
             break;
         }
     }
