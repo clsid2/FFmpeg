@@ -812,8 +812,10 @@ void ff_rtsp_undo_setup(AVFormatContext *s, int send_packets)
                 AVFormatContext *rtpctx = rtsp_st->transport_priv;
                 av_write_trailer(rtpctx);
                 if (rt->lower_transport == RTSP_LOWER_TRANSPORT_TCP) {
-                    if (CONFIG_RTSP_MUXER && rtpctx->pb && send_packets)
+#if CONFIG_RTSP_MUXER
+                    if (rtpctx->pb && send_packets)
                         ff_rtsp_tcp_write_packet(s, rtsp_st);
+#endif
                     ffio_free_dyn_buf(&rtpctx->pb);
                 } else {
                     avio_closep(&rtpctx->pb);
@@ -885,6 +887,7 @@ int ff_rtsp_open_transport_ctx(AVFormatContext *s, RTSPStream *rtsp_st)
         s->ctx_flags |= AVFMTCTX_NOHEADER;
 
     if (CONFIG_RTSP_MUXER && s->oformat && st) {
+        #if CONFIG_RTSP_MUXER
         int ret = ff_rtp_chain_mux_open((AVFormatContext **)&rtsp_st->transport_priv,
                                         s, st, rtsp_st->rtp_handle,
                                         rt->pkt_size,
@@ -894,6 +897,7 @@ int ff_rtsp_open_transport_ctx(AVFormatContext *s, RTSPStream *rtsp_st)
         if (ret < 0)
             return ret;
         st->time_base = ((AVFormatContext*)rtsp_st->transport_priv)->streams[0]->time_base;
+        #endif
     } else if (rt->transport == RTSP_TRANSPORT_RAW) {
         return 0; // Don't need to open any parser here
     } else if (CONFIG_RTPDEC && rt->transport == RTSP_TRANSPORT_RDT && st)
@@ -2145,9 +2149,13 @@ redirect:
             err = ff_rtsp_setup_input_streams(s, reply);
     } else
 #endif
-           if (CONFIG_RTSP_MUXER)
-        err = ff_rtsp_setup_output_streams(s, host);
+#if CONFIG_RTSP_MUXER
+        {
+
+            err = ff_rtsp_setup_output_streams(s, host);
+        }
     else
+#endif
         av_unreachable("Either muxer or demuxer must be enabled");
     if (err)
         goto fail;
