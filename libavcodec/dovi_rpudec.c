@@ -720,11 +720,17 @@ int ff_dovi_rpu_parse(DOVIContext *s, const uint8_t *rpu, size_t rpu_size,
     }
 
     align_get_bits(gb);
+    uint8_t misalignment_check = show_bits(gb, 8);
     skip_bits(gb, 32); /* CRC32 */
     if (get_bits(gb, 8) != 0x80) {
-        avpriv_request_sample(s->logctx, "Unexpected RPU format");
-        ff_dovi_ctx_unref(s);
-        return AVERROR_PATCHWELCOME;
+        if ((err_recognition & (AV_EF_COMPLIANT | AV_EF_CAREFUL)) ||
+            !(misalignment_check == 0 && get_bits_left(gb) >= 8 && get_bits(gb, 8) == 0x80)) {
+            avpriv_request_sample(s->logctx, "Unexpected RPU format");
+            ff_dovi_ctx_unref(s);
+            return AVERROR_PATCHWELCOME;
+        }
+
+        err_recognition |= AV_EF_CRCCHECK;
     }
 
     if (err_recognition & AV_EF_CRCCHECK) {
