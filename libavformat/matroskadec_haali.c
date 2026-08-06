@@ -611,15 +611,14 @@ static void mkv_process_chapters(AVFormatContext *s, Chapter *edition)
   }
 }
 
-static ulonglong mkv_get_track_mask(MatroskaDemuxContext *ctx)
+static void mkv_update_track_mask(MatroskaDemuxContext *ctx)
 {
   int i;
-  ulonglong mask = 0;
+  mkv_ClearTrackMask(ctx->matroska);
   for (i = 0; i < ctx->num_tracks; i++) {
     if (!ctx->tracks[i].stream || ctx->tracks[i].stream->discard == AVDISCARD_ALL)
-      mask |= (1ull << i);
+      mkv_SetTrackMaskBit(ctx->matroska, i, 1);
   }
-  return mask;
 }
 
 static void mkv_dump_chapters(Chapter *chapters, int count)
@@ -2112,17 +2111,12 @@ static int mkv_read_packet(AVFormatContext *s, AVPacket *pkt)
   char *frame_data = NULL;
   char *additional_data = NULL;
 
-  ulonglong mask = 0;
   if (!(s->flags & AVFMT_FLAG_NETWORK)) {
-    mask = mkv_get_track_mask(ctx);
-    if (mask != ctx->track_mask) {
-      mkv_SetTrackMask(ctx->matroska, mask);
-      ctx->track_mask = mask;
-    }
+    mkv_update_track_mask(ctx);
   }
 
 again:
-  ret = mkv_ReadFrame(ctx->matroska, mask, &track_num, &start_time, &end_time, &pos, &size, &frame_data, &flags, &discard_padding, &additional_size, &additional_data, &additional_id);
+  ret = mkv_ReadFrame(ctx->matroska, &track_num, &start_time, &end_time, &pos, &size, &frame_data, &flags, &discard_padding, &additional_size, &additional_data, &additional_id);
   if (ctx->virtual_timeline) {
     if (ret < 0)
       ret = mkv_packet_timeline_update(s, 0, 0, FRAME_EOF);
@@ -2334,7 +2328,7 @@ static int mkv_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
 
   /* update track mask */
   if (!(s->flags & AVFMT_FLAG_NETWORK))
-    mkv_SetTrackMask(ctx->matroska, mkv_get_track_mask(ctx));
+    mkv_update_track_mask(ctx);
 
   /* perform seek */
   mkv_Seek_CueAware(ctx->matroska, timestamp, mkvflags, 0);

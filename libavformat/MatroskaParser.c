@@ -69,7 +69,7 @@
 
 #define        MAX_STRING_LEN              16383
 #define        QSEGSIZE              512
-#define        MAX_TRACKS              64
+#define        MAX_TRACKS              256
 #define        MAX_READAHEAD              (256*1024)
 
 #define        MAXCLUSTER              (256*1048576)
@@ -115,6 +115,132 @@ static void  mystrlcpy(char *dst,const char *src,unsigned size) {
   if (i<size)
     dst[i] = 0;
 }
+
+/**********************************
+ * Bitset
+ **********************************/
+
+struct bitset_s {
+    uint64_t * restrict array;
+    /* For simplicity and performance, we prefer to have a size and a capacity that is a multiple of 64 bits.
+     * Thus we only track the size and the capacity in terms of 64-bit words allocated */
+    size_t arraysize;
+    size_t capacity;
+
+};
+
+typedef struct bitset_s bitset_t;
+
+/* Create a new bitset able to contain size bits. Return NULL in case of failure. */
+static bitset_t *bitset_create_with_capacity( size_t size ) {
+  bitset_t *bitset = NULL;
+  /* Allocate the bitset itself. */
+  if( ( bitset = (bitset_t*) malloc( sizeof( bitset_t ) ) ) == NULL ) {
+      return NULL;
+  }
+  bitset->arraysize = (size + sizeof(uint64_t) * 8 - 1) / (sizeof(uint64_t) * 8);
+  bitset->capacity = bitset->arraysize;
+  if ((bitset->array = (uint64_t *) calloc(bitset->arraysize, sizeof(uint64_t))) == NULL) {
+    free(bitset);
+    return NULL;
+  }
+  return bitset;
+}
+
+/* Create a copy */
+static bitset_t *bitset_copy( const bitset_t * bitset ) {
+  bitset_t *copy = NULL;
+  /* Allocate the bitset itself. */
+  if( ( copy = (bitset_t*) malloc( sizeof( bitset_t ) ) ) == NULL ) {
+      return NULL;
+  }
+  memcpy(copy, bitset, sizeof(bitset_t));
+  copy->capacity = copy->arraysize;
+  if ((copy->array = (uint64_t *) malloc(sizeof(uint64_t) * bitset->arraysize)) == NULL) {
+    free(copy);
+    return NULL;
+  }
+  memcpy(copy->array,bitset->array,sizeof(uint64_t) * bitset->arraysize);
+  return copy;
+}
+
+/* Free memory. */
+static void bitset_free(bitset_t *bitset) {
+  if (!bitset) return;
+  free(bitset->array);
+  free(bitset);
+}
+
+/* Set all bits to zero. */
+static void bitset_clear(bitset_t *bitset) {
+  memset(bitset->array,0,sizeof(uint64_t) * bitset->arraysize);
+}
+
+/* Set all bits to one. */
+static void bitset_fill(bitset_t *bitset) {
+  memset(bitset->array,0xff,sizeof(uint64_t) * bitset->arraysize);
+}
+
+static int bitset_grow(bitset_t *bitset,  size_t newarraysize) {
+  if(newarraysize < bitset->arraysize) { return 0; }
+  if(newarraysize > SIZE_MAX/64) { return 0; }
+  if (bitset->capacity < newarraysize) {
+    uint64_t *newarray;
+    size_t newcapacity = bitset->capacity;
+    if(newcapacity == 0) { newcapacity = 1; }
+    while(newcapacity < newarraysize) { newcapacity *= 2; }
+    if ((newarray = (uint64_t *) realloc(bitset->array, sizeof(uint64_t) * newcapacity)) == NULL) {
+      return 0;
+    }
+    bitset->capacity = newcapacity;
+    bitset->array = newarray;
+  }
+  memset(bitset->array + bitset->arraysize, 0, sizeof(uint64_t) * (newarraysize - bitset->arraysize));
+  bitset->arraysize = newarraysize;
+  return 1; // success!
+}
+
+/* Set the ith bit. Attempts to resize the bitset if needed (may silently fail) */
+static inline void bitset_set(bitset_t *bitset,  size_t i) {
+  size_t shiftedi = i / 64;
+  if (shiftedi >= bitset->arraysize) {
+    if( ! bitset_grow(bitset,  shiftedi + 1) ) {
+        return;
+    }
+  }
+  bitset->array[shiftedi] |= ((uint64_t)1) << (i % 64);
+}
+
+/* Set the ith bit to the specified value. Attempts to resize the bitset if needed (may silently fail) */
+static inline void bitset_set_to_value(bitset_t *bitset,  size_t i, int flag) {
+  size_t shiftedi = i / 64;
+  uint64_t mask = ((uint64_t)1) << (i % 64);
+  uint64_t dynmask = ((uint64_t)flag) << (i % 64);
+  if (shiftedi >= bitset->arraysize) {
+    if( ! bitset_grow(bitset,  shiftedi + 1) ) {
+        return;
+    }
+  }
+  uint64_t w = bitset->array[shiftedi];
+  w &= ~mask;
+  w |= dynmask;
+  bitset->array[shiftedi] = w;
+}
+
+/* Get the value of the ith bit.  */
+static inline int bitset_get(const bitset_t *bitset,  size_t i ) {
+  if (!bitset) return 0;
+  size_t shiftedi = i / 64;
+  if (shiftedi >= bitset->arraysize) {
+    return 0;
+  }
+  return ( bitset->array[shiftedi] & ( ((uint64_t)1) << (i % 64))) != 0 ;
+}
+
+/**********************************
+ * End of Bitset
+ **********************************/
+
 
 struct QueueEntry {
   struct QueueEntry   *next;
@@ -200,7 +326,7 @@ struct MatroskaFile {
   struct QueueEntry **QBlocks;
   struct Queue            *Queues;
   ulonglong            readPosition;
-  ulonglong            trackMask;
+  bitset_t             *trackMask;
   ulonglong            pSegmentTop;  // offset of next byte after the segment
   ulonglong            tcCluster;    // current cluster timecode
 
@@ -2467,7 +2593,7 @@ blockex:
 
       for (tracknum=0;tracknum<mf->nTracks;++tracknum)
         if (mf->Tracks[tracknum]->Number == trackid) {
-          if (mf->trackMask & (ULL(1)<<tracknum)) // ignore this block
+          if (bitset_get(mf->trackMask, tracknum)) // ignore this block
             break;
           goto found;
         }
@@ -2799,7 +2925,7 @@ ex:
 
 // this is almost the same as readMoreBlocks, except it ensures
 // there are no partial frames queued, however empty queues are ok
-static int  fillQueues(MatroskaFile *mf,ulonglong mask) {
+static int  fillQueues(MatroskaFile *mf, bitset_t *mask) {
   unsigned    i,j;
   int              ret = 0;
 
@@ -2807,7 +2933,7 @@ static int  fillQueues(MatroskaFile *mf,ulonglong mask) {
     j = 0;
 
     for (i=0;i<mf->nTracks;++i)
-      if (mf->Queues[i].head && !(mask & (ULL(1)<<i)))
+      if (mf->Queues[i].head && !bitset_get(mask, i))
         ++j;
 
     if (j>0) // have at least some frames
@@ -2816,7 +2942,7 @@ static int  fillQueues(MatroskaFile *mf,ulonglong mask) {
     if ((ret = readMoreBlocks(mf)) < 0) {
       j = 0;
       for (i=0;i<mf->nTracks;++i)
-        if (mf->Queues[i].head && !(mask & (ULL(1)<<i)))
+        if (mf->Queues[i].head && !bitset_get(mask, i))
           ++j;
       if (j) // we adjusted some blocks
         return 0;
@@ -2976,7 +3102,8 @@ ok:
 
   EmptyQueues(mf);
 
-  mf->trackMask = ~(ULL(1) << vtrack);
+  bitset_fill(mf->trackMask);
+  bitset_set_to_value(mf->trackMask, vtrack, 0);
 
   while (nd == 0 && retry < MAXDURATIONRETRY) {
     if (mf->nCues == 0) {
@@ -3008,12 +3135,12 @@ ok:
           nd = tc;
         QFree(mf, QGet(&mf->Queues[vtrack]));
       }
-    while (fillQueues(mf, 0) != EOF);
+    while (fillQueues(mf, NULL) != EOF);
 
     retry++;
   }
 
-  mf->trackMask = 0;
+  bitset_clear(mf->trackMask);
 
   EmptyQueues(mf);
 
@@ -3268,7 +3395,7 @@ static int NextPESubtitleIdx(MatroskaFile *mf, ulonglong timecode, int startIdx)
       } else {
           int trackIndex = TrackNumToIndex(mf, cue.Track);
 
-          if (trackIndex >= 0 && mf->Tracks[trackIndex]->Type == TT_SUB && !(mf->trackMask & (ULL(1) << trackIndex))
+          if (trackIndex >= 0 && mf->Tracks[trackIndex]->Type == TT_SUB && !bitset_get(mf->trackMask, trackIndex)
               && cue.Duration && cue.RelativePosition && cue.Time + cue.Duration >= timecode) {
 
               return i;
@@ -3326,6 +3453,7 @@ MatroskaFile  *mkv_OpenEx(InputStream *io,
 
   memset(mf,0,sizeof(*mf));
 
+  mf->trackMask = bitset_create_with_capacity(MAX_TRACKS);
   mf->cache = io;
   mf->flags = flags;
   io->progress(io,0,0);
@@ -3353,6 +3481,7 @@ MatroskaFile  *mkv_OpenSparse(InputStream *io,
 
   memset(mf,0,sizeof(*mf));
 
+  mf->trackMask = bitset_create_with_capacity(MAX_TRACKS);
   mf->cache = io;
   mf->flags = MKVF_AVOID_SEEKS;
   io->progress(io,0,0);
@@ -3428,6 +3557,8 @@ void              mkv_Close(MatroskaFile *mf) {
   }
   mf->cache->memfree(mf->cache,mf->Tags);
 
+  bitset_free(mf->trackMask);
+
   mf->cache->memfree(mf->cache, mf->cpbuf);
   mf->cache->memfree(mf->cache,mf);
 }
@@ -3494,7 +3625,7 @@ void mkv_Seek_CueAware(MatroskaFile *mf, ulonglong timecode, unsigned flags, uns
     Cue *cue;
 
     for (i=0;i<mf->nTracks;++i) {
-      if (mf->Tracks[i]->Type == TT_VIDEO && !(mf->trackMask & (ULL(1)<<i))) {
+      if (mf->Tracks[i]->Type == TT_VIDEO && !bitset_get(mf->trackMask, i)) {
         track = mf->Tracks[i]->Number;
         if (mf->Tracks[i]->DefaultDuration)
           default_duration = mf->Tracks[i]->DefaultDuration;
@@ -3530,7 +3661,7 @@ static inline int CueSuitableForSeeking(MatroskaFile *mf, int nCue) {
     return 0;
 
   for (n = 0; n < mf->nTracks; ++n) {
-    if (!(mf->trackMask & (ULL(1)<<n)) && mf->Tracks[n]->Type < nBestTrackType)
+    if (!bitset_get(mf->trackMask, n) && mf->Tracks[n]->Type < nBestTrackType)
       nBestTrackType = mf->Tracks[n]->Type;
 
     if (mf->Tracks[n]->Number == mf->Cues[nCue].Track)
@@ -3546,9 +3677,10 @@ static inline int CueSuitableForSeeking(MatroskaFile *mf, int nCue) {
 void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
   int                i,j,m,ret;
   unsigned        n,z;
-  ulonglong        mask,m_kftime[MAX_TRACKS];
+  ulonglong        m_kftime[MAX_TRACKS];
   unsigned char        m_seendf[MAX_TRACKS];
   struct Queue      *subPreQueues = NULL;
+  bitset_t *mask = NULL;
 
   if (mf->flags & MKVF_AVOID_SEEKS)
     return;
@@ -3584,7 +3716,10 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
       if (setjmp(mf->jb) != 0)
         goto dealloc;
 
-      mkv_SetTrackMask(mf,mf->trackMask);
+      // clear tracks we're not looking at
+      for (i=0;i<mf->nTracks;++i)
+        if (bitset_get(mf->trackMask, i))
+          ClearQueue(mf,&mf->Queues[i]);
 
       if (flags & (MKVF_SEEK_TO_PREV_KEYFRAME | MKVF_SEEK_TO_PREV_KEYFRAME_STRICT)) {
         // we do this in two stages
@@ -3610,7 +3745,7 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
           mf->tcCluster = mf->Cues[j].Time;
 
           for (;;) {
-            if ((ret = fillQueues(mf,0)) < 0 || ret == RBRESYNC)
+            if ((ret = fillQueues(mf, NULL)) < 0 || ret == RBRESYNC)
               goto dealloc;
 
             // drain queues until we get to the required timecode
@@ -3648,7 +3783,7 @@ void  mkv_Seek(MatroskaFile *mf,ulonglong timecode,unsigned flags) {
 found:
 
           for (n = 0; n < mf->nTracks; ++n)
-            if (!(mf->trackMask & (ULL(1) << n)) && m_kftime[n] == MAXU64 &&
+            if (!bitset_get(mf->trackMask, n) && m_kftime[n] == MAXU64 &&
                 m_seendf[n] && j > 0 && (mf->Tracks[n]->Type == TT_VIDEO || mf->Tracks[n]->Type == TT_AUDIO))
             {
               // we need to restart the search from prev cue
@@ -3671,10 +3806,12 @@ again:;
 
       // no timecodes for ignored streams
       for (n = 0; n < mf->nTracks; ++n)
-        if (mf->trackMask & (ULL(1) << n))
+        if (bitset_get(mf->trackMask, n))
             m_kftime[n] = MAXU64;
 
-      for (mask = mf->trackMask;;) {
+      bitset_free(mask); mask = NULL;
+      mask = bitset_copy(mf->trackMask);
+      for (;;) {
         if ((ret = fillQueues(mf,mask)) < 0 || ret == RBRESYNC)
           goto dealloc;
 
@@ -3688,7 +3825,7 @@ again:;
         for (n = z = 0; n < mf->nTracks; ++n)
           if (m_kftime[n] == MAXU64 || (mf->Queues[n].head && mf->Queues[n].head->Start >= m_kftime[n])) {
             ++z;
-            mask |= ULL(1) << n;
+            bitset_set(mask, n);
           } else if (!(mf->Tracks[n]->Type == TT_VIDEO || mf->Tracks[n]->Type == TT_AUDIO)) {
             ++z;
           }
@@ -3730,6 +3867,7 @@ again:;
   }
 
 dealloc:
+  bitset_free(mask);
   if (subPreQueues)
     QsStructFree(mf, subPreQueues);
 }
@@ -3801,21 +3939,25 @@ int              mkv_TruncFloat(MKFLOAT f) {
 
 #define        FTRACK        0xffffffff
 
-void              mkv_SetTrackMask(MatroskaFile *mf,ulonglong mask) {
-  unsigned int          i;
-
+void              mkv_ClearTrackMask(MatroskaFile *mf) {
   if (mf->flags & MPF_ERROR)
     return;
 
-  mf->trackMask = mask;
+  bitset_clear(mf->trackMask);
+}
 
-  for (i=0;i<mf->nTracks;++i)
-    if (mask & (ULL(1)<<i))
-      ClearQueue(mf,&mf->Queues[i]);
+void              mkv_SetTrackMaskBit(MatroskaFile *mf,int nTrack, int nValue) {
+  if (mf->flags & MPF_ERROR)
+    return;
+
+  bitset_set_to_value(mf->trackMask, nTrack, nValue);
+
+  if (nTrack < mf->nTracks && nValue)
+    ClearQueue(mf,&mf->Queues[nTrack]);
 }
 
 int              mkv_ReadFrame(MatroskaFile *mf,
-                            ulonglong mask,unsigned int *track,
+                            unsigned int *track,
                             ulonglong *StartTime,ulonglong *EndTime,
                             ulonglong *FilePos,unsigned int *FrameSize,
                             char **FrameData,unsigned int *FrameFlags, longlong *FrameDiscard,
@@ -3830,14 +3972,14 @@ int              mkv_ReadFrame(MatroskaFile *mf,
   do {
     // extract required frame, use block with the lowest timecode
     for (j=FTRACK,i=0;i<mf->nTracks;++i)
-      if (!(mask & (ULL(1)<<i)) && mf->Queues[i].head) {
+      if (!bitset_get(mf->trackMask, i) && mf->Queues[i].head) {
         j = i;
         ++i;
         break;
       }
 
     for (;i<mf->nTracks;++i)
-      if (!(mask & (ULL(1)<<i)) && mf->Queues[i].head &&
+      if (!bitset_get(mf->trackMask, i) && mf->Queues[i].head &&
           mf->Queues[j].head->Start > mf->Queues[i].head->Start)
         j = i;
 
@@ -3870,7 +4012,7 @@ int              mkv_ReadFrame(MatroskaFile *mf,
     if (mf->flags & MPF_ERROR)
       return -1;
 
-  } while (fillQueues(mf,mask)>=0);
+  } while (fillQueues(mf,mf->trackMask)>=0);
 
   return EOF;
 }
