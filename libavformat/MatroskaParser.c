@@ -36,6 +36,7 @@
 #include <setjmp.h>
 
 #include "libavutil/common.h"
+#include "libavcodec/defs.h"
 
 #if defined(_WIN32) && defined(_MSC_VER)
 // MS names some functions differently
@@ -2674,10 +2675,11 @@ found:
         qe->End = timecode;
         qe->Position = v;
         qe->Length = sizes[i];
-        qe->Data = (char *)mf->cache->memalloc(mf->cache,qe->Length + 16);
+        qe->Data = (char *)mf->cache->memalloc(mf->cache, qe->Length + AV_INPUT_BUFFER_PADDING_SIZE);
         if (qe->Data == NULL)
             errorjmp(mf, "Out of memory");
         readbytes(mf, qe->Data, qe->Length);
+        memset(qe->Data + qe->Length, 0, AV_INPUT_BUFFER_PADDING_SIZE);
         qe->flags = FRAME_UNKNOWN_END | FRAME_KF;
         if (i == nframes-1 && gap)
           qe->flags |= FRAME_GAP;

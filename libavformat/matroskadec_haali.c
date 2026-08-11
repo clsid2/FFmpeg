@@ -1930,7 +1930,7 @@ static int matroska_parse_wavpack(MatroskaTrack *track, uint8_t *src,
             goto fail;
         }
 
-        tmp = av_realloc(dst, dstlen + blocksize + 32);
+        tmp = av_realloc(dst, dstlen + blocksize + 32 + AV_INPUT_BUFFER_PADDING_SIZE);
         if (!tmp) {
             ret = AVERROR(ENOMEM);
             goto fail;
