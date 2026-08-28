@@ -1768,7 +1768,6 @@ static int read_data_continuous(void *opaque, uint8_t *buf, int buf_size)
     struct segment *seg;
 
     if (c->http_persistent && v->input_read_done) {
-        av_assert0(v->input);
         ret = reload_playlist(v, c);
         if (ret < 0)
             return ret;
